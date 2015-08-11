@@ -92,15 +92,30 @@
                   (apply ctool argv))))})))
 
 
+(defn ctool-run
+  [cluster-name nodes script]
+  (let [argv ["run" cluster-name
+              (if (= (class nodes) Integer)
+                (str nodes)
+                (name nodes))
+              "-"]]
+    (ctool argv script)))
+
+
+(defn ctool-run-scripts
+  [cluster-name script-maps]
+  (doseq [script-map script-maps
+          [k v] script-map]
+    (ctool-run cluster-name k v)))
+
+
 (defn install-product
   ;; TODO: implement other options in the argv
   [cluster product]
   (let [cluster-name (cluster-name cluster)
         argv (install-argv cluster product)]
     (ctool argv)
-    (doseq [[k v] (:post-install product)]
-      (let [argv ["run" cluster-name (name k) "-"]]
-        (ctool argv v)))
+    (ctool-run-scripts cluster-name (:post-install product))
     (let [argv ["start" cluster-name (:product product)]]
       (ctool argv))))
 

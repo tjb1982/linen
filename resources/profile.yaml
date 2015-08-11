@@ -1,9 +1,13 @@
 name: "junebug"
-dry-run: false
+dry-run: true
 #timestamp: 1439297805948
 tests:
-        - "java -jar /path/to/test.jar $OPSCENTER_IP_ADDR"
-        - "nosetests --tc=opscenter.ip_address:$OPSCENTER_IP_ADDRESS /path/to/test_class.py:TestClass.test_to_run"
+        - name: "foo"
+          invocation: "java -jar /path/to/test.jar $OPSCENTER_IP_ADDRESS"
+          description: "a description of what the test is for (taken from testrail)"
+        - name: "Another test"
+          invocation: "nosetests --tc=opscenter.ip_address:$OPSCENTER_IP_ADDRESS /path/to/test_class.py:TestClass.test_to_run"
+          description: "Nose test invocation"
 clusters:
         - cluster-name: "jb-opsc"
           num-nodes: 1
@@ -13,7 +17,7 @@ clusters:
                     branch: "spocklib"
                     install-type: "source"
                     post-install:
-                            all: |
+                            - all: |
                                     mkdir -p ~/.spock/ca
                                     export SPOCK_DB=~/.spock/spock.db
                                     export SPOCK_CA_DIR=~/.spock/ca
@@ -22,3 +26,8 @@ clusters:
                                     start-stop-daemon --start --name spock --background --exec /bin/bash -- \
                                     -c "export SPOCK_CA_DIR=~/.spock/ca && export SPOCK_DB=~/.spock/spock.db &&
                                     cd ~/ripcord/spock && java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve"
+                              "0,2": "ls -l"
+                              1: "pwd"
+                              2: "cat /proc/meminfo"
+                            - 2: "env"
+                              all: "cal"
