@@ -1,7 +1,9 @@
 name: "junebug"
 dry-run: false
-timestamp: 1439297805948
-tests: []
+#timestamp: 1439297805948
+tests:
+        - "java -jar /path/to/test.jar $OPSCENTER_IP_ADDR"
+        - "nosetests --tc=opscenter.ip_address:$OPSCENTER_IP_ADDRESS /path/to/test_class.py:TestClass.test_to_run"
 clusters:
         - cluster-name: "jb-opsc"
           num-nodes: 1
