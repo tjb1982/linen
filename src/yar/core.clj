@@ -12,7 +12,14 @@
 (def log-chan (chan))
 (def logger
   (go-loop []
-    (println (<! log-chan))
+    (let [msg (<! log-chan)
+          date (java.util.Date.)]
+      (when (= (class msg) String)
+        (println (str "\t" date ": " msg)))
+      (when-let [err (:stderr msg)]
+        (.println *err* (str date ": "  err)))
+      (when-let [out (:stdout msg)]
+        (.println *out* (str date ": " out))))
     (recur)))
 
 
@@ -115,13 +122,12 @@
             "ctool " (clojure.string/join " " argv)))
   (when-not *dry-run*
     (log
-      {:argv argv
-       :ret (sh/with-programs [ctool]
-              (binding [sh/*throw* false]
-                (let [flags (if in {:in in} {})
-                      argv (conj (into [] argv)
-                                 (assoc flags :verbose true))]
-                  (apply ctool argv))))})))
+      (sh/with-programs [ctool]
+        (binding [sh/*throw* false]
+          (let [flags (if in {:in in} {})
+                argv (conj (into [] argv)
+                           (assoc flags :verbose true))]
+            (apply ctool argv)))))))
 
 
 (defn ctool-run
