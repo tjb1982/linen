@@ -1,0 +1,22 @@
+name: "junebug"
+dry-run: false
+timestamp: 1439297805948
+tests: []
+clusters:
+        - cluster-name: "jb-opsc"
+          num-nodes: 1
+          force: true
+          products:
+                  - product: "opscenter"
+                    branch: "spocklib"
+                    install-type: "source"
+                    post-install:
+                            all: |
+                                    mkdir -p ~/.spock/ca
+                                    export SPOCK_DB=~/.spock/spock.db
+                                    export SPOCK_CA_DIR=~/.spock/ca
+                                    cd ripcord/spock
+                                    lein run db migrate && lein uberjar
+                                    start-stop-daemon --start --name spock --background --exec /bin/bash -- \
+                                    -c "export SPOCK_CA_DIR=~/.spock/ca && export SPOCK_DB=~/.spock/spock.db &&
+                                    cd ~/ripcord/spock && java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve"
