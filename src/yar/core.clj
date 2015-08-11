@@ -110,20 +110,23 @@
 
 
 (defn install-product
-  ;; TODO: implement other options in the argv
   [cluster product]
   (let [cluster-name (cluster-name cluster)
         argv (install-argv cluster product)]
     (ctool argv)
     (ctool-run-scripts cluster-name (:post-install product))
-    (let [argv ["start" cluster-name (:product product)]]
-      (ctool argv))))
+    ;; TODO: implement other options in the start argv
+    (when (:start product)
+      (let [argv ["start" cluster-name (:product product)]]
+        (ctool argv)
+        (ctool-run-scripts cluster-name (:post-start product))))))
 
 
 (defn provision-cluster
   [cluster]
   (let [argv (launch-argv cluster)]
     (ctool argv)
+    (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
     (doall
       (pmap 
         #(install-product cluster %)

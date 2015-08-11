@@ -12,12 +12,15 @@ clusters:
         - cluster-name: "jb-opsc"
           num-nodes: 1
           force: true
+          post-launch: null
           products:
                   - product: "opscenter"
                     branch: "spocklib"
                     install-type: "source"
-                    post-install:
-                            - all: |
+                    start: true
+                    post-install: null
+                    post-start:
+                            - 0: |
                                     mkdir -p ~/.spock/ca
                                     export SPOCK_DB=~/.spock/spock.db
                                     export SPOCK_CA_DIR=~/.spock/ca
