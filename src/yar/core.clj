@@ -29,20 +29,29 @@
        (.getTime *timestamp*)))
 
 
+(defn when-arg
+  [value flag]
+  (when value
+    [flag value]))
+
+
+(defn when-args
+  [config arg-vals]
+  (flatten (remove nil?
+    (for [[k v] arg-vals]
+      (when-arg (k config) v)))))
+
+
 (defn launch-argv
   [cluster]
   (flatten
     (remove
       nil?
       ["launch"
-       (when-let [platform (:platform cluster)]
-         ["-p" platform])
-       (when-let [it (:instance-type cluster)]
-         ["-i" it])
-       (when-let [jdk (:jdk cluster)]
-         ["-j" jdk])
-       (when-let [rn (:reserved-nodes cluster)]
-         ["-r" rn])
+       (when-args cluster {:platform "-p"
+                           :instance-type "-i"
+                           :jdk "-j"
+                           :reserved-nodes "-r"})
        (when-let [image (:image cluster)]
          (str "--image=" image))
        (when (:blockstore-optimized cluster)
@@ -69,10 +78,34 @@
   (flatten
     (remove nil?
       ["install"
-       (when-let [it (:install-type product)]
-         ["-i" it])
-       (when (:branch product)
-         ["-v" "spocklib"])
+       (when-args product
+                  {:multi-dc "-m"
+                   :config-file "-x"
+                   :snitch "-z"
+                   :tar-url "-t"
+                   :install-type "-i"
+                   :repo-alias "-a"
+                   :repo-url "-r"
+                   :branch-name "-b"
+                   :num-seeds-per-dc "-s"
+                   :percent-analytics "-y"
+                   :percent-search "-e"
+                   :percent-searchanalytics "-g"
+                   :percent-spark "-k"
+                   :version-or-branch "-v"
+                   :cass-package-version "-c"
+                   :num-tokens "-n"
+                   :partitioner "-p"})
+       (when-let [brn (:branch-repo-name product)]
+         (str "--branch-repo=" brn))
+       (when (:spark-hadoop product)
+         "--spark-hadoop")
+       (when (:isolated-nodes product)
+         "--isolated-nodes")
+       (when (:multi-data-disks product)
+         "--multi-data-disks")
+       (when-let [patch (:patch product)]
+         (str "--patch=" patch))
        (cluster-name cluster)
        (:product product)])))
 
@@ -133,17 +166,6 @@
         (:products cluster)))))
 
 
-;;(defn destroy-clusters
-;;  [cluster]
-;;  (sh/with-programs [ctool]
-;;    (let [argv ["destroy" "all"]
-;;          ret (binding [sh/*throw* false]
-;;                (apply ctool (conj argv {:verbose true})))]
-;;      (log ret)
-;;      {:argv argv
-;;       :sh ret})))
-
-
 (defn help []
   (log "usage: yar /path/to/profile.yaml (n.b., JSON is valid YAML)"))
 
@@ -163,7 +185,9 @@
                 *timestamp* (java.util.Date.
                               (or (:timestamp profile)
                                   (-> (java.util.Date.) .getTime)))]
-        (time (doall (pmap provision-cluster (:clusters profile))))
+        (time (doall (pmap provision-cluster (:clusters profile)))
+              #_(when (:run-tests profile)
+                run-tests))
         (shutdown-agents))
       (System/exit 2))))
 
