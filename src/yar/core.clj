@@ -1,6 +1,5 @@
 (ns yar.core
-  (:require [clojure.java.shell :refer [sh]]
-            [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
+  (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [me.raynes.conch :as sh]
             [clj-yaml.core :as yaml]
             [cheshire.core :as json]))
