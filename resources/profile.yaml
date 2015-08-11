@@ -15,7 +15,7 @@ clusters:
           post-launch: null
           products:
                   - product: "opscenter"
-                    branch: "spocklib"
+                    version-or-branch: "spocklib"
                     install-type: "source"
                     start: true
                     post-install: null
@@ -34,3 +34,4 @@ clusters:
                               2: "cat /proc/meminfo"
                             - 2: "env"
                               all: "cal"
+
