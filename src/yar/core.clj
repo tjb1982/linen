@@ -74,7 +74,6 @@
 
 (defn install-argv
   [cluster product]
-  ;; TODO: implement the rest of the possible options
   (flatten
     (remove nil?
       ["install"
@@ -112,10 +111,10 @@
 
 (defn ctool
   [argv & [in]]
-  (log
-    (if *dry-run*
-      (str (when in (str "echo " "'" in "' | "))
-           "ctool " (clojure.string/join " " argv))
+  (log (str (when in (str "echo " "'" in "' | "))
+            "ctool " (clojure.string/join " " argv)))
+  (when-not *dry-run*
+    (log
       {:argv argv
        :ret (sh/with-programs [ctool]
               (binding [sh/*throw* false]
@@ -172,22 +171,26 @@
 
 (defn -main
   [& argv]
-  (if (= (first argv) "help")
-    (help)
-    (if-let [profile (try
-                       (yaml/parse-string
-                         (slurp (first argv)))
-                       (catch Exception e
-                         (log (str "Invalid argument: " (.getMessage e)))
-                         (help)
-                         false))]
-      (binding [*dry-run* (:dry-run profile)
-                *timestamp* (java.util.Date.
-                              (or (:timestamp profile)
-                                  (-> (java.util.Date.) .getTime)))]
-        (time (doall (pmap provision-cluster (:clusters profile)))
-              #_(when (:run-tests profile)
-                run-tests))
-        (shutdown-agents))
-      (System/exit 2))))
+  (if (zero? (count argv))
+    (do
+      (help)
+      (System/exit 2))
+    (if (= (first argv) "help")
+      (help)
+      (if-let [profile (try
+                         (yaml/parse-string
+                           (slurp (first argv)))
+                         (catch Exception e
+                           (log (str "Invalid argument: " (.getMessage e)))
+                           (help)
+                           false))]
+        (binding [*dry-run* (:dry-run profile)
+                  *timestamp* (java.util.Date.
+                                (or (:timestamp profile)
+                                    (-> (java.util.Date.) .getTime)))]
+          (time (doall (pmap provision-cluster (:clusters profile)))
+                #_(when (:run-tests profile)
+                  run-tests))
+          (shutdown-agents))
+        (System/exit 100)))))
 

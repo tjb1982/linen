@@ -1,5 +1,5 @@
 name: "junebug"
-dry-run: true
+dry-run: false
 #timestamp: 1439297805948
 tests:
         - name: "foo"
