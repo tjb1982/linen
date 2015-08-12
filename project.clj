@@ -9,4 +9,5 @@
                  [circleci/clj-yaml "0.5.4"]
                  [me.raynes/conch "0.8.0"]
                  ]
+  :aot [yar.core]
   :main yar.core)
