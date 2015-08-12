@@ -1,30 +1,38 @@
 (ns yar.core
   (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [me.raynes.conch :as sh]
+            [me.raynes.conch.low-level :as lsh]
             [clj-yaml.core :as yaml]
             [clojure.pprint :refer [pprint]]
-            [cheshire.core :as json]))
+            [cheshire.core :as json])
+  (:gen-class))
 
 
 (def ^:dynamic *timestamp* nil)
 (def ^:dynamic *dry-run* nil)
 (def this-ns *ns*)
+(def genv
+  (atom
+    (sh/with-programs [env]
+      (into {} (for [ln (env {:seq true})]
+        (conj {} (clojure.string/split ln #"=" 2)))))))
+
 
 (def log-chan (chan))
 (def logger
   (go-loop []
     (let [msg (<! log-chan)
           date (java.util.Date.)]
-      (if (= (class msg) String)
+      (if-not (:stdout msg)
         (println (str "\t" date ": " msg))
         (do
           (let [err (:stderr msg)]
             (when-not (-> err clojure.string/blank?)
               (binding [*out* *err*]
-                (println (str "\t" date ": " err)))))
+                (println (str "\t" date ": ERROR: " err)))))
           (let [out (:stdout msg)]
             (when-not (-> out clojure.string/blank?)
-              (println (str "\t" date ": " out)))))))
+              (println (str "\t" date ": INFO: " out)))))))
     (recur)))
 
 
@@ -33,6 +41,13 @@
   (>!! log-chan msg)
   (when (:exit-code msg)
     @(:exit-code msg)))
+
+
+(defn expand-home
+  [s]
+  (-> s
+      (clojure.string/replace
+        "~" (System/getProperty "user.home"))))
 
 
 (defn cluster-name
@@ -130,11 +145,10 @@
   (when-not *dry-run*
     (log
       (sh/with-programs [ctool]
-        (binding [sh/*throw* false]
-          (let [flags (if in {:in in} {})
-                argv (conj (into [] argv)
-                           (assoc flags :verbose true))]
-            (apply ctool argv)))))))
+        (let [flags (if in {:in in} {})
+              argv (conj (into [] argv)
+                         (assoc flags :verbose true))]
+          (apply ctool argv))))))
 
 
 (defn ctool-run
@@ -167,15 +181,43 @@
         (ctool-run-scripts cluster-name (:post-start product))))))
 
 
+(defn add-cluster-to-genv
+  [cluster]
+  (sh/with-programs [ctool]
+    (let [ret (ctool "info" (cluster-name cluster) {:seq true})]
+      (doall
+        (pmap
+          (fn [ln]
+            (when (re-find #"public ip" ln)
+              (swap! genv (fn [old]
+                            (assoc old
+                                   (str (clojure.string/replace (:cluster-name cluster) #"-" "_") "_IP_ADDR")
+                                   (second (clojure.string/split ln #": ")))))))
+          ret)))))
+
+
 (defn provision-cluster
   [cluster]
-  (let [argv (launch-argv cluster)]
-    (ctool argv)
-    (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
-    (doall
-      (pmap 
-        #(install-product cluster %)
-        (:products cluster)))))
+  (when-not (:skip cluster)
+    (let [argv (launch-argv cluster)]
+      (ctool argv)
+      ;; add the ip address (etc.) to the genv
+      (add-cluster-to-genv cluster)
+      (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
+      (doall
+        (pmap 
+          #(install-product cluster %)
+          (:products cluster))))))
+
+
+(defn run-tests
+  [tests]
+  (doall (for [t tests]
+    (sh/with-programs [bash] 
+      (log
+        (lsh/stream-to-string
+          (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
+          :out))))))
 
 
 (defn help []
@@ -197,13 +239,20 @@
                            (log (str "Invalid argument: " (.getMessage e)))
                            (help)
                            false))]
-        (binding [*dry-run* (:dry-run profile)
+        (time (binding [sh/*throw* (:throw profile)
+                  *dry-run* (:dry-run profile)
                   *timestamp* (java.util.Date.
                                 (or (:timestamp profile)
                                     (-> (java.util.Date.) .getTime)))]
-          (time (doall (pmap provision-cluster (:clusters profile)))
-                #_(when (:run-tests profile)
-                  run-tests))
-          (shutdown-agents))
+
+          (when-not (:skip-provision profile)
+            (log "Provisioning nodes")
+            (doall (pmap provision-cluster (:clusters profile))))
+
+          (when-not (:skip-tests profile)
+            (log "Running tests")
+            (run-tests (:tests profile)))
+
+          (shutdown-agents)))
         (System/exit 100)))))
 

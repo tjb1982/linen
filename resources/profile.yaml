@@ -1,17 +1,18 @@
 name: "junebug"
 dry-run: false
-#timestamp: 1439297805948
+#skip-provision: true
+skip-tests: false
+throw: false
+timestamp: 1439379240015
 tests:
-        - name: "foo"
-          invocation: "java -jar /path/to/test.jar $OPSCENTER_IP_ADDRESS"
-          description: "a description of what the test is for (taken from testrail)"
-        - name: "Another test"
-          invocation: "nosetests --tc=opscenter.ip_address:$OPSCENTER_IP_ADDRESS /path/to/test_class.py:TestClass.test_to_run"
-          description: "Nose test invocation"
+       - name: "Smoke test"
+         description: "Automated script for pinging Spock to make sure the server responds" 
+         invocation: "$HOME/DS/ripcord/spock/test/functional/6238-test-demo-pathway.py $jb_opsc_IP_ADDR"
 clusters:
         - cluster-name: "jb-opsc"
           num-nodes: 1
           force: true
+          #skip: true
           post-launch: null
           products:
                   - product: "opscenter"
