@@ -184,9 +184,15 @@
       (doseq [ln ret]
         (when (re-find #"public ip" ln)
           (swap! genv (fn [old]
-                        (assoc old
-                               (str (clojure.string/replace (:cluster-name cluster) #"-" "_") "_IP_ADDR")
-                               (second (clojure.string/split ln #": "))))))))))
+                        (let [variable-base (str (clojure.string/replace 
+                                                   (:cluster-name cluster) #"-" "_")
+                                                 "_IP_ADDR_")]
+                          (loop [idx 0]
+                            (if (get @genv (str variable-base idx))
+                              (recur (inc idx))
+                              (assoc old
+                                     (str variable-base idx)
+                                     (second (clojure.string/split ln #": ")))))))))))))
 
 
 (defn provision-cluster
