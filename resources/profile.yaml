@@ -1,5 +1,5 @@
 name: "junebug"
-dry-run: false
+dry-run: true
 #skip-provision: true
 skip-tests: false
 throw: false

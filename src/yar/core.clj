@@ -201,9 +201,9 @@
   (when-not (:skip cluster)
     (let [argv (launch-argv cluster)]
       (ctool argv)
+      (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
       ;; add the ip address (etc.) to the genv
       (add-cluster-to-genv cluster)
-      (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
       (doall
         (pmap 
           #(install-product cluster %)
