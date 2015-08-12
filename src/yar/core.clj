@@ -224,6 +224,30 @@
   (log "usage: yar /path/to/profile.yaml (n.b., JSON is valid YAML)"))
 
 
+(defn run-profile
+  [profile]
+  (binding [sh/*throw* (:throw profile)
+            *dry-run* (:dry-run profile)
+            *timestamp* (java.util.Date.
+                          (or (:timestamp profile)
+                              (-> (java.util.Date.) .getTime)))]
+
+    (let [e (sh/with-programs [env]
+              (into {} (for [ln (env {:seq true})]
+                (conj {} (clojure.string/split ln #"=" 2)))))]
+      (swap! genv (fn [_] e)))
+
+    (binding [*dry-run* (or *dry-run* (:skip-provision profile))]
+      (log "Provisioning nodes")
+      (doall (pmap provision-cluster (:clusters profile))))
+
+    (binding [*dry-run* (or *dry-run* (:skip-tests profile))]
+      (log "Running tests")
+      (doall (map run-test (:tests profile))))
+
+    (shutdown-agents)))
+
+
 (defn -main
   [& argv]
   (if (zero? (count argv))
@@ -232,32 +256,13 @@
       (System/exit 2))
     (if (= (first argv) "help")
       (help)
-      (let [e (sh/with-programs [env]
-                (into {} (for [ln (env {:seq true})]
-                  (conj {} (clojure.string/split ln #"=" 2)))))]
-        (swap! genv (fn [_] e))
-        (if-let [profile (try
-                           (yaml/parse-string
-                             (slurp (first argv)))
-                           (catch Exception e
-                             (log (str "Invalid argument: " (.getMessage e)))
-                             (help)
-                             false))]
-          (time
-            (binding [sh/*throw* (:throw profile)
-                      *dry-run* (:dry-run profile)
-                      *timestamp* (java.util.Date.
-                                    (or (:timestamp profile)
-                                        (-> (java.util.Date.) .getTime)))]
-
-              (binding [*dry-run* (or *dry-run* (:skip-provision profile))]
-                (log "Provisioning nodes")
-                (doall (pmap provision-cluster (:clusters profile))))
-
-              (binding [*dry-run* (or *dry-run* (:skip-tests profile))]
-                (log "Running tests")
-                (doall (map run-test (:tests profile))))
-
-              (shutdown-agents)))
-          (System/exit 100))))))
+      (if-let [profile (try
+                         (yaml/parse-string
+                           (slurp (first argv)))
+                         (catch Exception e
+                           (log (str "Invalid argument: " (.getMessage e)))
+                           (help)
+                           false))]
+        (time (run-profile profile))
+        (System/exit 100)))))
 
