@@ -11,11 +11,7 @@
 (def ^:dynamic *timestamp* nil)
 (def ^:dynamic *dry-run* nil)
 (def this-ns *ns*)
-(def genv
-  (atom
-    (sh/with-programs [env]
-      (into {} (for [ln (env {:seq true})]
-        (conj {} (clojure.string/split ln #"=" 2)))))))
+(def genv (atom {}))
 
 
 (def log-chan (chan))
@@ -185,20 +181,17 @@
   [cluster]
   (sh/with-programs [ctool]
     (let [ret (ctool "info" (cluster-name cluster) {:seq true})]
-      (doall
-        (pmap
-          (fn [ln]
-            (when (re-find #"public ip" ln)
-              (swap! genv (fn [old]
-                            (assoc old
-                                   (str (clojure.string/replace (:cluster-name cluster) #"-" "_") "_IP_ADDR")
-                                   (second (clojure.string/split ln #": ")))))))
-          ret)))))
+      (doseq [ln ret]
+        (when (re-find #"public ip" ln)
+          (swap! genv (fn [old]
+                        (assoc old
+                               (str (clojure.string/replace (:cluster-name cluster) #"-" "_") "_IP_ADDR")
+                               (second (clojure.string/split ln #": "))))))))))
 
 
 (defn provision-cluster
   [cluster]
-  (when-not (:skip cluster)
+  (binding [*dry-run* (or *dry-run* (:skip cluster))]
     (let [argv (launch-argv cluster)]
       (ctool argv)
       (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
@@ -210,14 +203,15 @@
           (:products cluster))))))
 
 
-(defn run-tests
-  [tests]
-  (doall (for [t tests]
-    (sh/with-programs [bash] 
-      (log
-        (lsh/stream-to-string
-          (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
-          :out))))))
+(defn run-test
+  [t]
+  (binding [*dry-run* (or *dry-run* (:skip t))]
+    (if *dry-run*
+      (log (:invocation t))
+      (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])]
+        (log {:stdout (lsh/stream-to-string proc :out)
+              :stderr (lsh/stream-to-string proc :err)})
+        (lsh/exit-code proc)))))
 
 
 (defn help []
@@ -232,27 +226,32 @@
       (System/exit 2))
     (if (= (first argv) "help")
       (help)
-      (if-let [profile (try
-                         (yaml/parse-string
-                           (slurp (first argv)))
-                         (catch Exception e
-                           (log (str "Invalid argument: " (.getMessage e)))
-                           (help)
-                           false))]
-        (time (binding [sh/*throw* (:throw profile)
-                  *dry-run* (:dry-run profile)
-                  *timestamp* (java.util.Date.
-                                (or (:timestamp profile)
-                                    (-> (java.util.Date.) .getTime)))]
+      (let [e (sh/with-programs [env]
+                (into {} (for [ln (env {:seq true})]
+                  (conj {} (clojure.string/split ln #"=" 2)))))]
+        (swap! genv (fn [_] e))
+        (if-let [profile (try
+                           (yaml/parse-string
+                             (slurp (first argv)))
+                           (catch Exception e
+                             (log (str "Invalid argument: " (.getMessage e)))
+                             (help)
+                             false))]
+          (time
+            (binding [sh/*throw* (:throw profile)
+                      *dry-run* (:dry-run profile)
+                      *timestamp* (java.util.Date.
+                                    (or (:timestamp profile)
+                                        (-> (java.util.Date.) .getTime)))]
 
-          (when-not (:skip-provision profile)
-            (log "Provisioning nodes")
-            (doall (pmap provision-cluster (:clusters profile))))
+              (binding [*dry-run* (or *dry-run* (:skip-provision profile))]
+                (log "Provisioning nodes")
+                (doall (pmap provision-cluster (:clusters profile))))
 
-          (when-not (:skip-tests profile)
-            (log "Running tests")
-            (run-tests (:tests profile)))
+              (binding [*dry-run* (or *dry-run* (:skip-tests profile))]
+                (log "Running tests")
+                (doall (map run-test (:tests profile))))
 
-          (shutdown-agents)))
-        (System/exit 100)))))
+              (shutdown-agents)))
+          (System/exit 100))))))
 
