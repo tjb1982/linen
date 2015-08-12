@@ -1,13 +1,13 @@
 name: "junebug"
 dry-run: false
 skip-provision: true
-#skip-tests: true
+skip-tests: false
 throw: false
 timestamp: 1439379240015
 tests:
        - name: "Smoke test"
          description: "Automated script for pinging Spock to make sure the server responds" 
-         invocation: "$HOME/DS/ripcord/spock/test/functional/smoke-test.py $jb_opsc_IP_ADDR"
+         invocation: "$HOME/DS/ripcord/spock/test/functional/smoke-test.py $jb_opsc_IP_ADDR_0"
 clusters:
         - cluster-name: "jb-opsc"
           num-nodes: 1
