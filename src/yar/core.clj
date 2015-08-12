@@ -2,6 +2,7 @@
   (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [me.raynes.conch :as sh]
             [clj-yaml.core :as yaml]
+            [clojure.pprint :refer [pprint]]
             [cheshire.core :as json]))
 
 
@@ -14,18 +15,24 @@
   (go-loop []
     (let [msg (<! log-chan)
           date (java.util.Date.)]
-      (when (= (class msg) String)
-        (println (str "\t" date ": " msg)))
-      (when-let [err (:stderr msg)]
-        (.println *err* (str date ": "  err)))
-      (when-let [out (:stdout msg)]
-        (.println *out* (str date ": " out))))
+      (if (= (class msg) String)
+        (println (str "\t" date ": " msg))
+        (do
+          (let [err (:stderr msg)]
+            (when-not (-> err clojure.string/blank?)
+              (binding [*out* *err*]
+                (println (str "\t" date ": " err)))))
+          (let [out (:stdout msg)]
+            (when-not (-> out clojure.string/blank?)
+              (println (str "\t" date ": " out)))))))
     (recur)))
 
 
 (defn log
   [msg]
-  (>!! log-chan msg))
+  (>!! log-chan msg)
+  (when (:exit-code msg)
+    @(:exit-code msg)))
 
 
 (defn cluster-name
