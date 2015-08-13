@@ -20,15 +20,15 @@
     (let [msg (<! log-chan)
           date (java.util.Date.)]
       (if-not (:stdout msg)
-        (println (str "\t" date ": " msg))
+        (println (str date ": " msg))
         (do
           (let [err (:stderr msg)]
             (when-not (-> err clojure.string/blank?)
               (binding [*out* *err*]
-                (println (str "\t" date ": ERROR: " err)))))
+                (println (str date ": ERROR: " err)))))
           (let [out (:stdout msg)]
             (when-not (-> out clojure.string/blank?)
-              (println (str "\t" date ": INFO: " out)))))))
+              (println (str date ": " out)))))))
     (recur)))
 
 
@@ -37,13 +37,6 @@
   (>!! log-chan msg)
   (when (:exit-code msg)
     @(:exit-code msg)))
-
-
-(defn expand-home
-  [s]
-  (-> s
-      (clojure.string/replace
-        "~" (System/getProperty "user.home"))))
 
 
 (defn cluster-name
@@ -135,14 +128,17 @@
 
 
 (defn ctool
-  [argv & [in]]
-  (log (str (when in (str "echo " "'" in "' | "))
-            "ctool " (clojure.string/join " " argv)))
+  [argv & [flags]]
+  (when (:in flags)
+    (log "echo \"")
+    (doseq [ln (clojure.string/split (:in flags) #"\n")]
+      (log (str "\t" ln)))
+    (log "\" | "))
+  (log (str "ctool " (clojure.string/join " " argv)))
   (when-not *dry-run*
     (log
       (sh/with-programs [ctool]
-        (let [flags (if in {:in in} {})
-              argv (conj (into [] argv)
+        (let [argv (conj (into [] argv)
                          (assoc flags :verbose true))]
           (apply ctool argv))))))
 
@@ -154,7 +150,7 @@
                 (str nodes)
                 (name nodes))
               "-"]]
-    (ctool argv script)))
+    (ctool argv {:in script})))
 
 
 (defn ctool-run-scripts
@@ -212,8 +208,11 @@
 (defn run-test
   [t]
   (binding [*dry-run* (or *dry-run* (:skip t))]
-    (if *dry-run*
-      (log (:invocation t))
+    (log
+      (lsh/stream-to-string
+        (apply lsh/proc ["bash" "-c" (str "printf \"\t " (:invocation t) "\"") :env @genv])
+        :out))
+    (when-not *dry-run*
       (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])]
         (log {:stdout (lsh/stream-to-string proc :out)
               :stderr (lsh/stream-to-string proc :err)})
