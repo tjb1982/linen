@@ -203,17 +203,17 @@
 
 (defn provision-cluster
   [cluster]
-  (binding [*skip* (or *skip* (:skip cluster))
-            *dry-run* (or *dry-run* *skip*)]
-    (let [argv (launch-argv cluster)]
-      (ctool argv)
-      (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
-      ;; add the ip address (etc.) to the genv
-      (add-cluster-info-to-genv cluster)
-      (doall
-        (pmap 
-          #(install-product cluster %)
-          (:products cluster))))))
+  (binding [*skip* (or *skip* (:skip cluster))]
+    (binding [*dry-run* (or *dry-run* *skip*)]
+      (let [argv (launch-argv cluster)]
+        (ctool argv)
+        (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
+        ;; add the ip address (etc.) to the genv
+        (add-cluster-info-to-genv cluster)
+        (doall
+          (pmap 
+            #(install-product cluster %)
+            (:products cluster)))))))
 
 
 (defn run-test
@@ -259,20 +259,20 @@
                 (conj {} (clojure.string/split ln #"=" 2)))))]
       (swap! genv (fn [_] e)))
 
-    (binding [*skip* (not (:provision profile))
-              *dry-run* (or *dry-run* *skip*)]
-      (log "Provisioning nodes")
-      (doall (pmap provision-cluster (:clusters profile))))
+    (binding [*skip* (not (:provision profile))]
+      (binding [*dry-run* (or *dry-run* *skip*)]
+        (log "Provisioning nodes")
+        (doall (pmap provision-cluster (:clusters profile)))))
 
-    (binding [*skip* (not (:test profile))
-              *dry-run* (or *dry-run* *skip*)]
-      (log (str "Running tests in \"" (:name profile) "\" profile:"))
-      (doseq [test-collection (:tests profile)]
-        (log
-          (if (> (count test-collection) 1)
-            (str "\t\tRunning group of " (count test-collection) " in parallel: ")
-            "\t\tRunning group of 1: "))
-        (doall (map run-test test-collection))))
+    (binding [*skip* (not (:test profile))]
+      (binding [*dry-run* (or *dry-run* *skip*)]
+        (log (str "Running tests in \"" (:name profile) "\" profile:"))
+        (doseq [test-collection (:tests profile)]
+          (log
+            (if (> (count test-collection) 1)
+              (str "\t\tRunning group of " (count test-collection) " in parallel: ")
+              "\t\tRunning group of 1: "))
+          (doall (map run-test test-collection)))))
 
     (shutdown-agents)))
 
