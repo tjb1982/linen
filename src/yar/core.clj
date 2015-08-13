@@ -1,7 +1,6 @@
 (ns yar.core
   (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [me.raynes.conch :as sh]
-            [me.raynes.conch.low-level :as lsh]
             [clj-yaml.core :as yaml]
             [clojure.pprint :refer [pprint]]
             [cheshire.core :as json])
@@ -21,8 +20,8 @@
   (go-loop []
     (let [msg (<! log-chan)
           date (when-not *log-script* (str (java.util.Date.) ": "))]
-      (if-not (:stdout msg)
-        (println (str date (when *log-script* "# ") msg))
+      (if-not (or (:stdout msg) (:stderr msg))
+        (println (str date "### " msg))
         (do
           (let [err (:stderr msg)]
             (when-not (-> err clojure.string/blank?)
@@ -41,6 +40,12 @@
   (>!! log-chan msg)
   (when (:exit-code msg)
     @(:exit-code msg)))
+
+
+(defn skipstr
+  [& args]
+  (str (when *skip* "# ")
+       (apply str args)))
 
 
 (defn cluster-name
@@ -134,11 +139,11 @@
 (defn ctool
   [argv & [flags]]
   (when (:in flags)
-    (log {:stdout (str (when *skip* "# ") "echo \"")})
+    (log {:stdout (skipstr "echo \"")})
     (doseq [ln (clojure.string/split (:in flags) #"\n")]
-      (log {:stdout (str (when *skip* "# ") "\t" ln)}))
-    (log {:stdout (str (when *skip* "# ") "\" | ")}))
-  (log {:stdout (str (when *skip* "# ") "ctool " (clojure.string/join " " argv))})
+      (log {:stdout (skipstr "\t" ln)}))
+    (log {:stdout (skipstr "\" | ")}))
+  (log {:stdout (skipstr "ctool " (clojure.string/join " " argv))})
   (when-not *dry-run*
     (log
       (sh/with-programs [ctool]
@@ -220,24 +225,23 @@
   [t]
   (binding [*skip* (or *skip* (:skip t))]
     (binding [*dry-run* (or *dry-run* *skip*)]
-      (let [test-invocation-string (lsh/stream-to-string
-                                     (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
-                                     :out)]
-        (if *dry-run*
-          (log {:stdout (str (when *skip* "# ") test-invocation-string)})
-          (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
-                out (lsh/stream-to-string proc :out)
-                err (lsh/stream-to-string proc :err)]
+      (sh/with-programs [bash]
+        (let [test-invocation-string (bash "-c"
+                                           (str "printf \"" (:invocation t) "\"")
+                                           {:env @genv})]
+          (if *dry-run*
+            (log {:stdout (skipstr test-invocation-string)})
+            (let [ret (bash "-c" (:invocation t) {:env @genv :verbose true})]
 
-            (when-not (zero? (count out))
-              (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string ": " out)}))
+              (when-not (zero? (count (:stdout ret)))
+                (log {:stdout (skipstr test-invocation-string)})
+                (log (:stdout ret)))
 
-            (when-not (zero? (count err))
-              (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string)})
-              (log {:stdout ""
-                    :stderr err}))
+              (when-not (zero? (count (:stderr ret)))
+                (log {:stdout (skipstr test-invocation-string)})
+                (log {:stderr (:stderr ret)}))
 
-            (lsh/exit-code proc)))))))
+              @(:exit-code ret))))))))
 
 
 (defn help []
