@@ -9,9 +9,9 @@
 
 
 (def ^:dynamic *timestamp* nil)
-(def ^:dynamic *dry-run* nil)
-(def ^:dynamic *skip* nil)
-(def ^:dynamic *log-script* nil)
+(def ^:dynamic *dry-run* false)
+(def ^:dynamic *skip* false)
+(def ^:dynamic *log-script* false)
 (def this-ns *ns*)
 (def genv (atom {}))
 
@@ -218,8 +218,8 @@
 
 (defn run-test
   [t]
-  (binding [*dry-run* (or *dry-run* (:skip t))
-            *skip* (or *skip* (:skip t))]
+  (binding [*skip* (or *skip* (:skip t))
+            *dry-run* (or *dry-run* *skip*)]
     (let [test-invocation-string (lsh/stream-to-string
                                    (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
                                    :out)]
@@ -230,10 +230,10 @@
               err (lsh/stream-to-string proc :err)]
 
           (when-not (zero? (count out))
-            (log {:stdout (str "\t" test-invocation-string ": " out)}))
+            (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string ": " out)}))
 
           (when-not (zero? (count err))
-            (log {:stdout (str "\t" test-invocation-string)})
+            (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string)})
             (log {:stdout ""
                   :stderr err}))
 
