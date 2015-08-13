@@ -1,7 +1,8 @@
 name: "keystone"
 dry-run: false
 skip-provision: true
-skip-tests: true
+skip-tests: false
+log-script: true
 throw: false
 timestamp: 1439379240015
 tests:
