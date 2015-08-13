@@ -2,6 +2,6 @@
 
 # yar
 
-using [leiningen](leiningen.org):
+using [leiningen](http://leiningen.org):
 
     lein run ./resources/profile.yaml
