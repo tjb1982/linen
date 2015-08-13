@@ -213,8 +213,8 @@
     (let [test-invocation-string (lsh/stream-to-string
                                    (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
                                    :out)]
-      ;;(log (str "\t" test-invocation-string))
-      (when-not *dry-run*
+      (if *dry-run*
+        (log (str "\t" test-invocation-string))
         (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
               out (lsh/stream-to-string proc :out)
               err (lsh/stream-to-string proc :err)]
