@@ -10,6 +10,7 @@
 
 (def ^:dynamic *timestamp* nil)
 (def ^:dynamic *dry-run* nil)
+(def ^:dynamic *log-script* nil)
 (def this-ns *ns*)
 (def genv (atom {}))
 
@@ -18,19 +19,19 @@
 (def logger
   (go-loop []
     (let [msg (<! log-chan)
-          date (java.util.Date.)]
+          date (when-not *log-script* (str (java.util.Date.) ": "))]
       (if-not (:stdout msg)
-        (println (str date ": " msg))
+        (println (str date (when *log-script* "#") " " msg))
         (do
           (let [err (:stderr msg)]
             (when-not (-> err clojure.string/blank?)
               (binding [*out* *err*]
                 (doseq [ln (clojure.string/split err #"\n")]
-                  (println (str date ": ERROR: " ln))))))
+                  (println (str date (when *log-script* "#") " ERROR: " ln))))))
           (let [out (:stdout msg)]
             (when-not (-> out clojure.string/blank?)
               (doseq [ln (clojure.string/split out #"\n")]
-                (println (str date ": " ln))))))))
+                (println (str date ln))))))))
     (recur)))
 
 
@@ -132,11 +133,11 @@
 (defn ctool
   [argv & [flags]]
   (when (:in flags)
-    (log "echo \"")
+    (log {:stdout "echo \""})
     (doseq [ln (clojure.string/split (:in flags) #"\n")]
-      (log (str "\t" ln)))
-    (log "\" | "))
-  (log (str "ctool " (clojure.string/join " " argv)))
+      (log {:stdout (str "\t" ln)}))
+    (log {:stdout "\" | "}))
+  (log {:stdout (str "ctool " (clojure.string/join " " argv))})
   (when-not *dry-run*
     (log
       (sh/with-programs [ctool]
@@ -175,22 +176,28 @@
         (ctool-run-scripts cluster-name (:post-start product))))))
 
 
-(defn add-cluster-to-genv
+(defn add-cluster-ip-to-genv
+  [ln cluster]
+  (swap! genv
+    (fn [old]
+      (let [variable-base (str (clojure.string/replace 
+                                 (:cluster-name cluster) #"-" "_")
+                               "_IP_ADDR_")]
+        (loop [idx 0]
+          (if (get @genv (str variable-base idx))
+            (recur (inc idx))
+            (assoc old
+                   (str variable-base idx)
+                   (second (clojure.string/split ln #": ")))))))))
+
+
+(defn add-cluster-info-to-genv
   [cluster]
   (sh/with-programs [ctool]
     (let [ret (ctool "info" (cluster-name cluster) {:seq true})]
       (doseq [ln ret]
         (when (re-find #"public ip" ln)
-          (swap! genv (fn [old]
-                        (let [variable-base (str (clojure.string/replace 
-                                                   (:cluster-name cluster) #"-" "_")
-                                                 "_IP_ADDR_")]
-                          (loop [idx 0]
-                            (if (get @genv (str variable-base idx))
-                              (recur (inc idx))
-                              (assoc old
-                                     (str variable-base idx)
-                                     (second (clojure.string/split ln #": ")))))))))))))
+          (add-cluster-ip-to-genv ln cluster))))))
 
 
 (defn provision-cluster
@@ -200,7 +207,7 @@
       (ctool argv)
       (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
       ;; add the ip address (etc.) to the genv
-      (add-cluster-to-genv cluster)
+      (add-cluster-info-to-genv cluster)
       (doall
         (pmap 
           #(install-product cluster %)
@@ -214,11 +221,20 @@
                                    (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
                                    :out)]
       (if *dry-run*
-        (log (str "\t" test-invocation-string))
+        (log {:stdout (str test-invocation-string)})
         (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
               out (lsh/stream-to-string proc :out)
               err (lsh/stream-to-string proc :err)]
-          (log {:stdout (if-not (zero? (count out)) (str "\t" test-invocation-string ": " out) "")
+
+          (when-not (zero? (count out))
+            (log {:stdout (str "\t" test-invocation-string ": " out)}))
+
+          (when-not (zero? (count err))
+            (log {:stdout (str "\t" test-invocation-string)})
+            (log {:stdout ""
+                  :stderr err}))
+
+          #_(log {:stdout (if-not (zero? (count out)) (str "\t" test-invocation-string ": " out) "")
                 :stderr (if-not (zero? (count err)) (str test-invocation-string ":\n" err) "")})
           (lsh/exit-code proc))))))
 
@@ -235,6 +251,8 @@
                           (or (:timestamp profile)
                               (-> (java.util.Date.) .getTime)))]
 
+    (alter-var-root #'*log-script* (fn [_] (:log-script profile)))
+
     (let [e (sh/with-programs [env]
               (into {} (for [ln (env {:seq true})]
                 (conj {} (clojure.string/split ln #"=" 2)))))]
@@ -245,7 +263,7 @@
       (doall (pmap provision-cluster (:clusters profile))))
 
     (binding [*dry-run* (or *dry-run* (:skip-tests profile))]
-      (log "Running tests")
+      (log (str "Running tests in \"" (:name profile) "\" profile:"))
       (doseq [test-collection (:tests profile)]
         (log
           (if (> (count test-collection) 1)
