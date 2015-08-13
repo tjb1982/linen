@@ -10,6 +10,7 @@
 
 (def ^:dynamic *timestamp* nil)
 (def ^:dynamic *dry-run* nil)
+(def ^:dynamic *skip* nil)
 (def ^:dynamic *log-script* nil)
 (def this-ns *ns*)
 (def genv (atom {}))
@@ -21,13 +22,13 @@
     (let [msg (<! log-chan)
           date (when-not *log-script* (str (java.util.Date.) ": "))]
       (if-not (:stdout msg)
-        (println (str date (when *log-script* "#") " " msg))
+        (println (str date (when *log-script* "# ") msg))
         (do
           (let [err (:stderr msg)]
             (when-not (-> err clojure.string/blank?)
               (binding [*out* *err*]
                 (doseq [ln (clojure.string/split err #"\n")]
-                  (println (str date (when *log-script* "#") " ERROR: " ln))))))
+                  (println (str date (when *log-script* "# ") "ERROR: " ln))))))
           (let [out (:stdout msg)]
             (when-not (-> out clojure.string/blank?)
               (doseq [ln (clojure.string/split out #"\n")]
@@ -133,11 +134,11 @@
 (defn ctool
   [argv & [flags]]
   (when (:in flags)
-    (log {:stdout "echo \""})
+    (log {:stdout (str (when *skip* "# ") "echo \"")})
     (doseq [ln (clojure.string/split (:in flags) #"\n")]
-      (log {:stdout (str "\t" ln)}))
-    (log {:stdout "\" | "}))
-  (log {:stdout (str "ctool " (clojure.string/join " " argv))})
+      (log {:stdout (str (when *skip* "# ") "\t" ln)}))
+    (log {:stdout (str (when *skip* "# ") "\" | ")}))
+  (log {:stdout (str (when *skip* "# ") "ctool " (clojure.string/join " " argv))})
   (when-not *dry-run*
     (log
       (sh/with-programs [ctool]
@@ -202,7 +203,8 @@
 
 (defn provision-cluster
   [cluster]
-  (binding [*dry-run* (or *dry-run* (:skip cluster))]
+  (binding [*skip* (or *skip* (:skip cluster))
+            *dry-run* (or *dry-run* *skip*)]
     (let [argv (launch-argv cluster)]
       (ctool argv)
       (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
@@ -216,12 +218,13 @@
 
 (defn run-test
   [t]
-  (binding [*dry-run* (or *dry-run* (:skip t))]
+  (binding [*dry-run* (or *dry-run* (:skip t))
+            *skip* (or *skip* (:skip t))]
     (let [test-invocation-string (lsh/stream-to-string
                                    (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
                                    :out)]
       (if *dry-run*
-        (log {:stdout (str test-invocation-string)})
+        (log {:stdout (str (when *skip* "# ") test-invocation-string)})
         (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
               out (lsh/stream-to-string proc :out)
               err (lsh/stream-to-string proc :err)]
@@ -234,8 +237,6 @@
             (log {:stdout ""
                   :stderr err}))
 
-          #_(log {:stdout (if-not (zero? (count out)) (str "\t" test-invocation-string ": " out) "")
-                :stderr (if-not (zero? (count err)) (str test-invocation-string ":\n" err) "")})
           (lsh/exit-code proc))))))
 
 
@@ -258,11 +259,13 @@
                 (conj {} (clojure.string/split ln #"=" 2)))))]
       (swap! genv (fn [_] e)))
 
-    (binding [*dry-run* (or *dry-run* (:skip-provision profile))]
+    (binding [*skip* (not (:provision profile))
+              *dry-run* (or *dry-run* *skip*)]
       (log "Provisioning nodes")
       (doall (pmap provision-cluster (:clusters profile))))
 
-    (binding [*dry-run* (or *dry-run* (:skip-tests profile))]
+    (binding [*skip* (not (:test profile))
+              *dry-run* (or *dry-run* *skip*)]
       (log (str "Running tests in \"" (:name profile) "\" profile:"))
       (doseq [test-collection (:tests profile)]
         (log
@@ -289,6 +292,6 @@
                            (log (str "Invalid argument: " (.getMessage e)))
                            (help)
                            false))]
-        (time (run-profile profile))
+        (run-profile profile)
         (System/exit 100)))))
 
