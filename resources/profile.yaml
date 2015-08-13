@@ -13,7 +13,7 @@ tests:
          - name: "A different smoke test"
            description: "Automated script for pinging Spock to make sure the server responds" 
            invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.py $jb_opsc_IP_ADDR_0"
-           #skip: true
+           skip: true
        - - invocation: "$OPSC_REPO_HOME/spock/test/functional/6238-test-demo-pathway.py $jb_opsc_IP_ADDR_0"
            description: "Happy path (from nothing)"
            name: "Happy path 1"

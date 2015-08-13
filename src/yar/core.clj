@@ -9,9 +9,9 @@
 
 
 (def ^:dynamic *timestamp* nil)
-(def ^:dynamic *dry-run* false)
-(def ^:dynamic *skip* false)
-(def ^:dynamic *log-script* false)
+(def ^:dynamic *dry-run* nil)
+(def ^:dynamic *skip* nil)
+(def ^:dynamic *log-script* nil)
 (def this-ns *ns*)
 (def genv (atom {}))
 
@@ -218,26 +218,26 @@
 
 (defn run-test
   [t]
-  (binding [*skip* (or *skip* (:skip t))
-            *dry-run* (or *dry-run* *skip*)]
-    (let [test-invocation-string (lsh/stream-to-string
-                                   (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
-                                   :out)]
-      (if *dry-run*
-        (log {:stdout (str (when *skip* "# ") test-invocation-string)})
-        (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
-              out (lsh/stream-to-string proc :out)
-              err (lsh/stream-to-string proc :err)]
+  (binding [*skip* (or *skip* (:skip t))]
+    (binding [*dry-run* (or *dry-run* *skip*)]
+      (let [test-invocation-string (lsh/stream-to-string
+                                     (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
+                                     :out)]
+        (if *dry-run*
+          (log {:stdout (str (when *skip* "# ") test-invocation-string)})
+          (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
+                out (lsh/stream-to-string proc :out)
+                err (lsh/stream-to-string proc :err)]
 
-          (when-not (zero? (count out))
-            (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string ": " out)}))
+            (when-not (zero? (count out))
+              (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string ": " out)}))
 
-          (when-not (zero? (count err))
-            (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string)})
-            (log {:stdout ""
-                  :stderr err}))
+            (when-not (zero? (count err))
+              (log {:stdout (str (when *skip* "# ") "\t" test-invocation-string)})
+              (log {:stdout ""
+                    :stderr err}))
 
-          (lsh/exit-code proc))))))
+            (lsh/exit-code proc)))))))
 
 
 (defn help []
@@ -272,7 +272,7 @@
           (if (> (count test-collection) 1)
             (str "\t\tRunning group of " (count test-collection) " in parallel: ")
             "\t\tRunning group of 1: "))
-        (doall (pmap run-test test-collection))))
+        (doall (map run-test test-collection))))
 
     (shutdown-agents)))
 
