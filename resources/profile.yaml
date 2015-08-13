@@ -5,14 +5,17 @@ skip-tests: false
 throw: false
 timestamp: 1439379240015
 tests:
-       - name: "Smoke test"
-         description: "Automated script for pinging Spock to make sure the server responds" 
-         invocation: "$HOME/DS/ripcord/spock/test/functional/smoke-test.sh $jb_opsc_IP_ADDR_0"
-         #skip: true
-       - name: "A different smoke test"
-         description: "Automated script for pinging Spock to make sure the server responds" 
-         invocation: "$HOME/DS/ripcord/spock/test/functional/smoke-test.py $jb_opsc_IP_ADDR_0"
-         #skip: true
+       - - name: "Smoke test"
+           description: "Automated script for pinging Spock to make sure the server responds" 
+           invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.sh $jb_opsc_IP_ADDR_0"
+           #skip: true
+         - name: "A different smoke test"
+           description: "Automated script for pinging Spock to make sure the server responds" 
+           invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.py $jb_opsc_IP_ADDR_0"
+           #skip: true
+       - - invocation: "$OPSC_REPO_HOME/spock/test/functional/6238-test-demo-pathway.py $jb_opsc_IP_ADDR_0"
+           description: "Happy path (from nothing)"
+           name: "Happy path 1"
 clusters:
         - cluster-name: "jb-opsc"
           num-nodes: 1

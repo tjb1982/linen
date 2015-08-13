@@ -25,10 +25,12 @@
           (let [err (:stderr msg)]
             (when-not (-> err clojure.string/blank?)
               (binding [*out* *err*]
-                (println (str date ": ERROR: " err)))))
+                (doseq [ln (clojure.string/split err #"\n")]
+                  (println (str date ": ERROR: " ln))))))
           (let [out (:stdout msg)]
             (when-not (-> out clojure.string/blank?)
-              (println (str date ": " out)))))))
+              (doseq [ln (clojure.string/split out #"\n")]
+                (println (str date ": " ln))))))))
     (recur)))
 
 
@@ -208,15 +210,17 @@
 (defn run-test
   [t]
   (binding [*dry-run* (or *dry-run* (:skip t))]
-    (log
-      (lsh/stream-to-string
-        (apply lsh/proc ["bash" "-c" (str "printf \"\t " (:invocation t) "\"") :env @genv])
-        :out))
-    (when-not *dry-run*
-      (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])]
-        (log {:stdout (lsh/stream-to-string proc :out)
-              :stderr (lsh/stream-to-string proc :err)})
-        (lsh/exit-code proc)))))
+    (let [test-invocation-string (lsh/stream-to-string
+                                   (apply lsh/proc ["bash" "-c" (str "printf \"" (:invocation t) "\"") :env @genv])
+                                   :out)]
+      ;;(log (str "\t" test-invocation-string))
+      (when-not *dry-run*
+        (let [proc (apply lsh/proc ["bash" "-c" (:invocation t) :env @genv])
+              out (lsh/stream-to-string proc :out)
+              err (lsh/stream-to-string proc :err)]
+          (log {:stdout (if-not (zero? (count out)) (str "\t" test-invocation-string ": " out) "")
+                :stderr (if-not (zero? (count err)) (str test-invocation-string ":\n" err) "")})
+          (lsh/exit-code proc))))))
 
 
 (defn help []
@@ -242,7 +246,12 @@
 
     (binding [*dry-run* (or *dry-run* (:skip-tests profile))]
       (log "Running tests")
-      (doall (map run-test (:tests profile))))
+      (doseq [test-collection (:tests profile)]
+        (log
+          (if (> (count test-collection) 1)
+            (str "\t\tRunning group of " (count test-collection) " in parallel: ")
+            "\t\tRunning group of 1: "))
+        (doall (pmap run-test test-collection))))
 
     (shutdown-agents)))
 
