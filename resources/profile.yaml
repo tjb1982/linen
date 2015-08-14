@@ -2,9 +2,9 @@ name: "keystone"
 dry-run: false
 provision: false
 test: true
-log-script: false
+log-script: true
 throw: false
-timestamp: 1439379240015
+timestamp: 1439379240017
 tests:
        - - name: "Smoke test"
            description: "Automated script for pinging Spock to make sure the server responds" 
@@ -18,6 +18,13 @@ tests:
            description: "Happy path (from nothing)"
            name: "Happy path 1"
 clusters:
+        - cluster-name: "jb-dse"
+          num-nodes: 3
+          force: true
+          products:
+                  - product: "enterprise"
+                    version-or-branch: "4.7.0-1"
+                    start: true
         - cluster-name: "jb-opsc"
           num-nodes: 1
           force: true
