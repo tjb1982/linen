@@ -23,15 +23,15 @@
       (if-not (or (:stdout msg) (:stderr msg))
         (println (str date "### " msg))
         (do
+          (let [out (:stdout msg)]
+            (when-not (-> out clojure.string/blank?)
+              (doseq [ln (clojure.string/split out #"\n")]
+                (println (str date ln)))))
           (let [err (:stderr msg)]
             (when-not (-> err clojure.string/blank?)
               (binding [*out* *err*]
                 (doseq [ln (clojure.string/split err #"\n")]
-                  (println (str date (when *log-script* "# ") "ERROR: " ln))))))
-          (let [out (:stdout msg)]
-            (when-not (-> out clojure.string/blank?)
-              (doseq [ln (clojure.string/split out #"\n")]
-                (println (str date ln))))))))
+                  (println (str date (when *log-script* "# ") ln)))))))))
     (recur)))
 
 
@@ -145,11 +145,13 @@
     (log {:stdout (skipstr "\" | ")}))
   (log {:stdout (skipstr "ctool " (clojure.string/join " " argv))})
   (when-not *dry-run*
-    (log
-      (sh/with-programs [ctool]
-        (let [argv (conj (into [] argv)
-                         (assoc flags :verbose true))]
-          (apply ctool argv))))))
+    (sh/with-programs [ctool]
+      (let [argv (conj (into [] argv)
+                       (assoc flags :verbose true))
+            ret (apply ctool argv)]
+        (log {:stderr (:stdout ret)})
+        (log {:stderr (:stderr ret)})
+        @(:exit-code ret)))))
 
 
 (defn ctool-run
@@ -245,7 +247,7 @@
 
 
 (defn help []
-  (log "usage: yar /path/to/profile.yaml (n.b., JSON is valid YAML)"))
+  (println "usage: yar /path/to/profile.yaml (n.b., JSON is valid YAML)"))
 
 
 (defn run-profile
