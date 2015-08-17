@@ -1,55 +1,65 @@
 name: "keystone"
-dry-run: true
-log-script: false
+#dry-run: true
+#log-script: true
 throw: false
 timestamp: 1439379240018
 tests:
-        throw: false
-        skip: false
-        groups:
-               - - name: "Smoke test"
-                   description: "Automated script for pinging Spock to make sure the server responds" 
-                   invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.sh $jb_opsc_IP_ADDR_0"
-                   #skip: true
-                 - name: "A different smoke test"
-                   description: "Automated script for pinging Spock to make sure the server responds" 
-                   invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.py $jb_opsc_IP_ADDR_0"
-                   #skip: true
-               - - invocation: "$OPSC_REPO_HOME/spock/test/functional/6238-test-demo-pathway.py $jb_opsc_IP_ADDR_0"
-                   description: "Happy path (from nothing)"
-                   name: "Happy path 1"
-                   throw: false
+  throw: false
+  skip: false
+  groups:
+    - skip: false
+      throw: true
+      constraints:
+        cluster-name: "jb-opsc"
+          - all:
+              type: "product"
+              state: "clean"
+      group:
+        - name: "Smoke test"
+          description: "Automated script for pinging Spock at the api base to make sure the server responds"
+          invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.sh $jb_opsc_IP_ADDR_0"
+        - name: "A different smoke test"
+          description: "A smoke test that tries the /provisioning/datacenters/ endpoint, waiting 5 seconds for a response"
+          invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.py $jb_opsc_IP_ADDR_0"
+    - group:
+        - invocation: "$OPSC_REPO_HOME/spock/test/functional/6238-test-demo-pathway.py $jb_opsc_IP_ADDR_0"
+          description: "Testing /provisioning/repository_credentials/ endpoint"
+          name: "Repository credentials"
+          throw: false
+      constraints: null
+
 clusters:
-        skip: false
-        throw: true
-        groups:
-               - - cluster-name: "jb-dse"
-                   num-nodes: 3
-                   force: true
-                   products:
-                           - product: "enterprise"
-                             version-or-branch: "4.7.0-1"
-                             start: true
-                 - cluster-name: "jb-opsc"
-                   num-nodes: 1
-                   force: true
-                   #skip: true
-                   post-launch: null
-                   products:
-                           - product: "opscenter"
-                             version-or-branch: "spocklib"
-                             install-type: "source"
-                             start: true
-                             post-install: null
-                             post-start:
-                                     - 0: |
-                                             mkdir -p ~/.spock/ca
-                                             export SPOCK_DB=~/.spock/spock.db
-                                             export SPOCK_CA_DIR=~/.spock/ca
-                                             cd ripcord/spock
-                                             lein run db migrate && lein uberjar
-                                             start-stop-daemon --start --name spock --background --exec /bin/bash -- \
-                                             -c "export SPOCK_CA_DIR=~/.spock/ca && export SPOCK_DB=~/.spock/spock.db &&
-                                             cd ~/ripcord/spock && java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve"
-                                             sleep 10
+  skip: true
+  throw: false
+  groups:
+    - - cluster-name: "jb-dse"
+        num-nodes: 3
+        force: true
+        skip: true
+        products:
+          - product: "enterprise"
+            version-or-branch: "4.7.0-1"
+            start: true
+      - cluster-name: "jb-opsc"
+        num-nodes: 1
+        force: true
+        #skip: true
+        post-launch: null
+        products:
+          - product: "opscenter"
+            version-or-branch: "spocklib"
+            install-type: "source"
+            start: true
+            post-install: null
+            post-start:
+              - 0: |
+                  mkdir -p ~/.spock/ca
+                  export SPOCK_DB=~/.spock/spock.db
+                  export SPOCK_CA_DIR=~/.spock/ca
+                  cd ripcord/spock
+                  lein run db migrate && lein uberjar
+                  start-stop-daemon --start --name spock --background --exec /bin/bash -- \
+                  -c "export SPOCK_CA_DIR=~/.spock/ca && export SPOCK_DB=~/.spock/spock.db &&
+                  cd ~/ripcord/spock && java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve"
+                  sleep 10
         
