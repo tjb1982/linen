@@ -278,11 +278,12 @@
                 sh/*throw* (or sh/*throw* (-> profile :tests :throw))]
         (log (str "Running tests in \"" (:name profile) "\" profile:"))
         (doseq [test-collection (-> profile :tests :groups)]
-          (log
-            (if (> (count test-collection) 1)
-              (str "\t\tRunning group of " (count test-collection) " in parallel: ")
-              "\t\tRunning group of 1: "))
-          (doall (pmap run-test test-collection)))))
+          (let [group (:group test-collection)]
+            (log
+              (if (> (count group) 1)
+                (str "\t\tRunning group of " (count group) " in parallel: ")
+                "\t\tRunning group of 1: "))
+            (doall (pmap run-test group))))))
 
     (shutdown-agents)))
 
