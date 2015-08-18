@@ -72,8 +72,7 @@
 (defn launch-argv
   [cluster]
   (flatten
-    (remove
-      nil?
+    (remove nil?
       ["launch"
        (when-args cluster {:platform "-p"
                            :instance-type "-i"
@@ -137,7 +136,7 @@
 
 
 (defn ctool
-  [argv & [flags]]
+  [argv & [flags force]]
   (when (:in flags)
     (log {:stdout (skipstr "echo \"")})
     (doseq [ln (clojure.string/split (:in flags) #"\n")]
@@ -149,19 +148,47 @@
       (let [argv (conj (into [] argv)
                        (assoc flags :verbose true))
             ret (apply ctool argv)]
+        @(:exit-code ret)
         (log {:stderr (:stdout ret)})
         (log {:stderr (:stderr ret)})
-        @(:exit-code ret)))))
+        ret))))
+
+
+(defn add-ctool-out-to-genv
+  [argv k v]
+  (swap! genv
+    #(assoc % (name k)
+            (let [lines (into []
+                              (-> (ctool argv {:in v})
+                                  :stdout
+                                  (clojure.string/split #"\n")))
+                  out-idx (.indexOf lines "Out: ")
+                  err-idx (.indexOf lines "Err: ")]
+              (loop [idx (inc out-idx)
+                     output nil]
+                (if (= idx err-idx)
+                  output
+                  (let [ln (get lines idx)]
+                    (recur (inc idx)
+                           (str output (if output
+                                         (str "\n" ln)
+                                         ln))))))))))
 
 
 (defn ctool-run
   [cluster-name nodes script]
   (let [argv ["run" cluster-name
-              (if (= (class nodes) Integer)
+              (if (isa? (class nodes) Integer)
                 (str nodes)
                 (name nodes))
               "-"]]
-    (ctool argv {:in script})))
+    (if (isa? (class script) String)
+      (ctool argv {:in script})
+      (doall (pmap
+        (fn [& [[k v] entry]]
+          (add-ctool-out-to-genv argv k v))
+        (into [] script)))
+      )))
 
 
 (defn ctool-run-scripts
@@ -169,6 +196,29 @@
   (doseq [script-map script-maps
           [k v] script-map]
     (ctool-run cluster-name k v)))
+
+
+(defmacro wrap-binding
+  [what & forms]
+  `(binding [*skip* (or *skip* (:skip ~what))]
+    (binding [*dry-run* (or *dry-run* *skip*)
+               sh/*throw* (or sh/*throw* (:throw ~what))]
+      ~@forms)))
+
+
+(defn do-groups
+  [fun groups]
+  (doseq [collection groups]
+    (when (:checkpoint collection)
+      (doseq [[k v] (:checkpoint collection)]
+        (ctool-run-scripts
+          (cluster-name
+            {:cluster-name (name k)})
+            v)))
+    (let [group (:group collection)]
+      (wrap-binding collection
+        (doall (pmap fun group)))
+      )))
 
 
 (defn install-product
@@ -210,42 +260,38 @@
 
 (defn provision-cluster
   [cluster]
-  (binding [*skip* (or *skip* (:skip cluster))]
-    (binding [*dry-run* (or *dry-run* *skip*)
-              sh/*throw* (or sh/*throw* (:throw cluster))]
-      (let [argv (launch-argv cluster)]
-        (ctool argv)
-        (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
-        ;; add the ip address (etc.) to the genv
-        (add-cluster-info-to-genv cluster)
-        (doall
-          (pmap 
-            #(install-product cluster %)
-            (:products cluster)))))))
+  (wrap-binding cluster
+    (let [argv (launch-argv cluster)]
+      (ctool argv)
+      (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
+      ;; add the ip address (etc.) to the genv
+      (add-cluster-info-to-genv cluster)
+
+      (do-groups
+        #(install-product cluster %)
+        (-> cluster :products :groups)))))
 
 
 (defn run-test
   [t]
-  (binding [*skip* (or *skip* (:skip t))]
-    (binding [*dry-run* (or *dry-run* *skip*)
-              sh/*throw* (or sh/*throw* (:throw t))]
-      (sh/with-programs [bash]
-        (let [test-invocation-string (bash "-c"
-                                           (str "printf \"" (:invocation t) "\"")
-                                           {:env @genv})]
-          (if *dry-run*
-            (log {:stdout (skipstr test-invocation-string)})
-            (let [ret (bash "-c" (:invocation t) {:env @genv :verbose true})]
+  (wrap-binding t
+    (sh/with-programs [bash]
+      (let [test-invocation-string (bash "-c"
+                                         (str "printf \"" (:invocation t) "\"")
+                                         {:env @genv})]
+        (if *dry-run*
+          (log {:stdout (skipstr test-invocation-string)})
+          (let [ret (bash "-c" (:invocation t) {:env @genv :verbose true})]
 
-              (when-not (zero? (count (:stdout ret)))
-                (log {:stdout (skipstr test-invocation-string)})
-                (log (:stdout ret)))
+            (when-not (zero? (count (:stdout ret)))
+              (log {:stdout (skipstr test-invocation-string)})
+              (log (:stdout ret)))
 
-              (when-not (zero? (count (:stderr ret)))
-                (log {:stdout (skipstr test-invocation-string)})
-                (log {:stderr (:stderr ret)}))
+            (when-not (zero? (count (:stderr ret)))
+              (log {:stdout (skipstr test-invocation-string)})
+              (log {:stderr (:stderr ret)}))
 
-              @(:exit-code ret))))))))
+            @(:exit-code ret)))))))
 
 
 (defn help []
@@ -262,30 +308,19 @@
 
     (alter-var-root #'*log-script* (fn [_] (:log-script profile)))
 
-    (binding [*skip* (-> profile :clusters :skip)]
-      (binding [*dry-run* (or *dry-run* *skip*)
-                sh/*throw* (or sh/*throw* (-> profile :tests :throw))]
-        (log (str "Provisioning clusters in \"" (:name profile) "\" profile:"))
-        (doseq [cluster-collection (-> profile :clusters :groups)]
-          (log
-            (if (> (count cluster-collection) 1)
-              (str "\t\tProvisioning group of " (count cluster-collection) " in parallel: ")
-              "\t\tProvisioning group of 1: "))
-          (doall (pmap provision-cluster cluster-collection)))))
+    (wrap-binding (-> profile :clusters)
+      (log (str "Provisioning clusters in \"" (:name profile) "\" profile:"))
+      
+      (do-groups
+        provision-cluster
+        (-> profile :clusters :groups)))
 
-    (binding [*skip* (-> profile :tests :skip)]
-      (binding [*dry-run* (or *dry-run* *skip*)
-                sh/*throw* (or sh/*throw* (-> profile :tests :throw))]
-        (log (str "Running tests in \"" (:name profile) "\" profile:"))
-        (doseq [test-collection (-> profile :tests :groups)]
-          (let [group (:group test-collection)]
-            (log
-              (if (> (count group) 1)
-                (str "\t\tRunning group of " (count group) " in parallel: ")
-                "\t\tRunning group of 1: "))
-            (doall (pmap run-test group))))))
+    (wrap-binding (-> profile :tests)
+      (log (str "Running tests in \"" (:name profile) "\" profile:"))
 
-    (shutdown-agents)))
+      (do-groups
+        run-test
+        (-> profile :tests :groups)))))
 
 
 (defn -main
@@ -300,9 +335,11 @@
                          (yaml/parse-string
                            (slurp (first argv)))
                          (catch Exception e
-                           (log (str "Invalid argument: " (.getMessage e)))
+                           (println (str "Invalid argument: " (.getMessage e)))
                            (help)
                            false))]
-        (run-profile profile)
+        (do
+          (run-profile profile)
+          #_(shutdown-agents))
         (System/exit 100)))))
 
