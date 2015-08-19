@@ -184,7 +184,7 @@
               "-"]]
     (if (isa? (class script) String)
       (ctool argv {:in script})
-      (doall (pmap
+      (doall (map
         (fn [& [[k v] entry]]
           (add-ctool-out-to-genv argv k v))
         (into [] script)))
@@ -210,11 +210,11 @@
   [fun groups]
   (doseq [collection groups]
     (when (:checkpoint collection)
-      (doseq [[k v] (:checkpoint collection)]
+      (doseq [[cluster script-maps] (:checkpoint collection)]
         (ctool-run-scripts
           (cluster-name
-            {:cluster-name (name k)})
-            v)))
+            {:cluster-name (name cluster)})
+            script-maps)))
     (let [group (:group collection)]
       (wrap-binding collection
         (doall (pmap fun group)))
