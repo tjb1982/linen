@@ -32,16 +32,16 @@ tests:
                 # applies to this test only
               - name: "Smoke test"
                 description: "Automated script for pinging Spock at the api base to make sure the server responds"
-                invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.sh $OPSC_PUBLIC_IP"
+                invocation: "$OPSC_REPO_HOME/spock/test/functional/smoketests/smoke-test.sh $OPSC_PUBLIC_IP"
               - name: "A different smoke test"
                 description: "A smoke test that tries the /provisioning/datacenters/ endpoint, waiting 5 seconds for a response"
-                invocation: "$OPSC_REPO_HOME/spock/test/functional/smoke-test.py $OPSC_PUBLIC_IP"
+                invocation: "$OPSC_REPO_HOME/spock/test/functional/smoketests/smoke-test.py $OPSC_PUBLIC_IP"
         - throw: false
           skip: false
           group:
               - invocation: |
-                    $OPSC_REPO_HOME/spock/test/functional/test_repository_credential.py $OPSC_PUBLIC_IP \
-                        $OPSC_REPO_HOME/spock/test/functional/tests.yaml
+                    $OPSC_REPO_HOME/spock/test/functional/smoketests/api-test-interpreter.py $OPSC_PUBLIC_IP \
+                        $OPSC_REPO_HOME/spock/test/functional/smoketests/api-smoketests.yaml
                 description: "Testing /provisioning/repository_credentials/ endpoint"
                 name: "Repository credentials"
                 throw: false
@@ -62,7 +62,7 @@ clusters:
                     groups:
                           # applies to all products in this group
                         - group:
-                                # applies to a this product only
+                                # applies to this product only
                               - product: "opscenter"
                                 version-or-branch: "spocklib"
                                 install-type: "source"
@@ -78,4 +78,4 @@ clusters:
                                           -c "export SPOCK_CA_DIR=~/.spock/ca && export SPOCK_DB=~/.spock/spock.db &&
                                               cd ~/ripcord/spock && java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve &> ~/.spock/spock.log"
                                           sleep 10
-                            
+
