@@ -36,6 +36,14 @@
        (.getTime *timestamp*)))
 
 
+(defn bash-printf
+  [string]
+  (sh/with-programs [bash]
+    (bash "-c"
+      (str "printf \"" string "\"")
+    {:env @genv})))
+
+
 (defn when-arg
   [value flag]
   (when value
@@ -267,10 +275,7 @@
   [t]
   (wrap-binding t
     (sh/with-programs [bash]
-      (let [checkpoint-exec-string 
-            (bash "-c"
-              (str "printf \"" (:exec t) "\"")
-              {:env @genv})]
+      (let [checkpoint-exec-string (bash-printf (:exec t))]
         (if (and (:cluster-name t)
                  (not= (:cluster-name t) "localhost"))
           (ctool-run (assoc t :exec checkpoint-exec-string))
@@ -294,9 +299,10 @@
   [profile]
   (wrap-binding profile
 
-    (binding [*timestamp* (java.util.Date.
-                            (or (-> profile :timestamp)
-                                (-> (java.util.Date.) .getTime)))]
+    (binding [*timestamp* (or *timestamp*
+                            (java.util.Date.
+                              (or (-> profile :timestamp)
+                                  (-> (java.util.Date.) .getTime))))]
 
       (alter-var-root #'*log-script*
         (fn [old] (if (false? (-> profile :log-script))
@@ -316,16 +322,15 @@
         (do-groups
           run-checkpoint
           (-> profile :checkpoints :groups)))
+
+      (when (-> profile :children)
+        (doall (pmap
+          (fn [child-resource-location]
+            (let [child (yaml/parse-string (slurp (bash-printf child-resource-location)))]
+              (run-profile child)))
+          (-> profile :children))))
       
       )))
-
-
-(defn run-profile-tree
-  [tree num-jobs]
-  ;; run the root profile, binding its throw/skip/dry-run
-  ;; create a snapshot of all of the clusters if necessary
-  ;; run each child in parallel with a clone of the snapshots created
-  )
 
 
 (defn help []
@@ -348,9 +353,7 @@
                            (help)
                            false))]
         (do
-          (wrap-binding profile
-            (run-profile profile)
-            (run-profile (yaml/parse-string (slurp "./resources/profile2.yaml"))))
+          (run-profile profile)
 
           (Thread/sleep 500)
           (shutdown-agents))
