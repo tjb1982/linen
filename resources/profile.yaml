@@ -1,81 +1,78 @@
-name: "spock demo path"
+name: Spock init
+description: Cluster setup and spock init/smoketests
 #dry-run: true
 log-script: true
 throw: false
-timestamp: 1439918712121
-tests:
+timestamp: 1439918712125
+checkpoints:
     # applies to all tests
-    throw: false
-    skip: false
+    throw: true
     groups:
           # applies to all tests in this group
-        - skip: false
-          throw: false
-          checkpoint:
-              jb-opsc:
-                  - 0:
-                        OPSC_PUBLIC_IP: "dig +short myip.opendns.com @resolver1.opendns.com"
-                        OPSC_PRIVATE_IP: "hostname -I"
-                  - 0: |
-                       start-stop-daemon --stop --pidfile ~/.spock/spock.pid
-                       kill $$(ps aux | grep 'spock' | awk '{print $$2}')
-                       rm ~/.spock/spock.db
-                       export SPOCK_DB=~/.spock/spock.db
-                       export SPOCK_CA_DIR=~/.spock/ca
-                       cd ripcord/spock
-                       lein run db migrate
-                       start-stop-daemon --start --name spock -m --pidfile ~/.spock/spock.pid --background --exec /bin/bash -- \
-                       -c "export SPOCK_CA_DIR=~/.spock/ca && export SPOCK_DB=~/.spock/spock.db &&
-                           cd ~/ripcord/spock && java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve &> ~/.spock/spock.log"
-                       sleep 10
-          group:
+        - group:
                 # applies to this test only
-              - name: "Smoke test"
-                description: "Automated script for pinging Spock at the api base to make sure the server responds"
-                invocation: "$OPSC_REPO_HOME/spock/test/functional/smoketests/smoke-test.sh $OPSC_PUBLIC_IP"
-              - name: "A different smoke test"
-                description: "A smoke test that tries the /provisioning/datacenters/ endpoint, waiting 5 seconds for a response"
-                invocation: "$OPSC_REPO_HOME/spock/test/functional/smoketests/smoke-test.py $OPSC_PUBLIC_IP"
-        - throw: false
-          skip: false
-          group:
-              - invocation: |
-                    $OPSC_REPO_HOME/spock/test/functional/smoketests/api-test-interpreter.py $OPSC_PUBLIC_IP \
-                        $OPSC_REPO_HOME/spock/test/functional/smoketests/api-smoketests.yaml
-                description: "Testing /provisioning/repository_credentials/ endpoint"
-                name: "Repository credentials"
-                throw: false
+              - cluster-name: jb-opsc
+                exec: hostname -I
+                out: OPSC_PRIVATE_IP
+              - cluster-name: jb-opsc
+                exec: dig +short myip.opendns.com @resolver1.opendns.com
+                out: OPSC_PUBLIC_IP
+        - group:
+              - cluster-name: jb-opsc
+                description: >
+                        Kills running spock instances, drops/recreates the database,
+                        and restarts the spock daemon
+                exec: |
+                        start-stop-daemon --stop --pidfile ~/.spock/spock.pid
+                        kill \$\$(ps aux | grep 'spock' | awk '{print \$\$2}')
+                        rm ~/.spock/spock.db
+                        export SPOCK_DB=~/.spock/spock.db
+                        cd ripcord/spock
+                        lein run db migrate
+                        start-stop-daemon --start --name spock -m --pidfile ~/.spock/spock.pid --background --exec /bin/bash -- \
+                        -c 'cd ~/ripcord/spock 
+                            export SPOCK_DB=~/.spock/spock.db
+                            export SPOCK_CA_DIR=~/.spock/ca
+                            export OPSC_PUBLIC_IP=$OPSC_PUBLIC_IP
+                            java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve &> ~/.spock/spock.log'
+        - group:
+              - description: >
+                        A smoke test that pings Spock at the api base. Checks n times
+                        every m seconds before reporting a failure, so that the spock
+                        service has a chance to start up completely.
+                exec: $OPSC_REPO_HOME/spock/test/functional/smoketests/smoke-test.sh $OPSC_PUBLIC_IP:8889/api/ 10 2
+        - group:
+              - description: >
+                        A smoke test that tries the /provisioning/datacenters/ endpoint,
+                        waiting 5 seconds for a response
+                exec: $OPSC_REPO_HOME/spock/test/functional/smoketests/smoke-test.py $OPSC_PUBLIC_IP
 clusters:
     # applies to all clusters
-    skip: true
-    throw: false
+    skip: false
     groups:
           # applies to all clusters in each group
-        - skip: false
-          group:
+        - group:
                 # applies to a single cluster
-              - cluster-name: "jb-opsc"
+              - cluster-name: jb-opsc
+                skip: true
                 num-nodes: 1
                 force: true
+                throw: false
                 products:
                     # applies to all products in this cluster
+                    throw: true
                     groups:
                           # applies to all products in this group
                         - group:
                                 # applies to this product only
-                              - product: "opscenter"
-                                version-or-branch: "spocklib"
-                                install-type: "source"
+                              - product: opscenter
+                                version-or-branch: spocklib
+                                install-type: source
+                                throw: false
                                 start: true
-                                post-start:
-                                    - 0: |
+                                post-install:
+                                    - exec: |
                                           mkdir -p ~/.spock/ca
-                                          export SPOCK_DB=~/.spock/spock.db
-                                          export SPOCK_CA_DIR=~/.spock/ca
                                           cd ripcord/spock
-                                          lein run db migrate && lein uberjar
-                                          start-stop-daemon --start --name spock -m --pidfile ~/.spock/spock.pid --background --exec /bin/bash -- \
-                                          -c "export SPOCK_CA_DIR=~/.spock/ca && export SPOCK_DB=~/.spock/spock.db &&
-                                              cd ~/ripcord/spock && java -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve &> ~/.spock/spock.log"
-                                          sleep 10
+                                          lein uberjar
 
