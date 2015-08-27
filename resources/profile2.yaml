@@ -1,0 +1,38 @@
+name: Spock high level API
+timestamp: 1439918712125
+isolate:
+    - jb-opsc
+description: >
+        Tests a variety of spock api endpoints, tangentially
+        related to a high level "demo" path
+checkpoints:
+    # applies to all tests
+    groups:
+        - throw: true
+          group:
+              - cluster-name: empty
+                exec: dig +short myip.opendns.com @resolver1.opendns.com
+                out: EMPTY_IPS
+              - cluster-name: empty
+                node-list: 0
+                exec: cat ~/.ssh/id_rsa
+                out: EMPTY_SSH_PRIVATE_KEY
+          # applies to all tests in this group
+        - throw: false
+          group:
+                # applies to this test only
+              - exec: |
+                    $OPSC_REPO_HOME/spock/test/functional/smoketests/api-test-interpreter.py \
+                        http://$OPSC_PUBLIC_IP:8889/api/v1 \
+                        $OPSC_REPO_HOME/spock/test/functional/smoketests/demo-path.yaml \
+                        -- $(echo "$EMPTY_IPS" | tr "\n" " ") "$EMPTY_SSH_PRIVATE_KEY"
+                description: "Testing /provisioning/repository_credentials/ endpoint"
+clusters:
+    skip: true
+    groups:
+        - throw: true
+          group:
+              - cluster-name: empty
+                num-nodes: 3
+                force: true
+

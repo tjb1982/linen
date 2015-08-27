@@ -3,43 +3,23 @@
             [me.raynes.conch :as sh]
             [clj-yaml.core :as yaml]
             [clojure.pprint :refer [pprint]]
-            [cheshire.core :as json])
+            [cheshire.core :as json]
+            [yar.logutil :refer [log *log-script*]])
   (:gen-class))
 
 
 (def ^:dynamic *timestamp* nil)
 (def ^:dynamic *dry-run* nil)
 (def ^:dynamic *skip* nil)
-(def ^:dynamic *log-script* nil)
 (def this-ns *ns*)
 (def genv (atom {}))
+(def gclusters (atom {}))
 
 
-(def log-chan (chan))
-(def logger
-  (go-loop []
-    (let [msg (<! log-chan)
-          date (when-not *log-script* (str (java.util.Date.) ": "))]
-      (if-not (or (:stdout msg) (:stderr msg))
-        (println (str date "### " msg))
-        (do
-          (let [out (:stdout msg)]
-            (when-not (-> out clojure.string/blank?)
-              (doseq [ln (clojure.string/split out #"\n")]
-                (println (str date ln)))))
-          (let [err (:stderr msg)]
-            (when-not (-> err clojure.string/blank?)
-              (binding [*out* *err*]
-                (doseq [ln (clojure.string/split err #"\n")]
-                  (println (str date (when *log-script* "# ") ln)))))))))
-    (recur)))
-
-
-(defn log
-  [msg]
-  (>!! log-chan msg)
-  (when (:exit-code msg)
-    @(:exit-code msg)))
+(defn die
+  [& args]
+  (apply println args)
+  (System/exit 1))
 
 
 (defn skipstr
@@ -48,7 +28,7 @@
        (apply str args)))
 
 
-(defn cluster-name
+(defn full-cluster-name
   [cluster]
   (str (or (:cluster-name cluster)
            (-> this-ns str (clojure.string/split #"\.") first))
@@ -94,7 +74,7 @@
                 (:tags cluster))))
        (when (:keep-api-proxy cluster)
          "--keep-api-proxy")
-       (cluster-name cluster)
+       (full-cluster-name cluster)
        (or (:num-nodes cluster) 1)])))
 
 
@@ -131,18 +111,19 @@
          "--multi-data-disks")
        (when-let [patch (:patch product)]
          (str "--patch=" patch))
-       (cluster-name cluster)
+       (full-cluster-name cluster)
        (:product product)])))
 
 
 (defn ctool
   [argv & [flags force]]
-  (when (:in flags)
-    (log {:stdout (skipstr "echo \"")})
-    (doseq [ln (clojure.string/split (:in flags) #"\n")]
-      (log {:stdout (skipstr "\t" ln)}))
-    (log {:stdout (skipstr "\" | ")}))
-  (log {:stdout (skipstr "ctool " (clojure.string/join " " argv))})
+  (log {:stdout (str (when (:in flags)
+                       (str 
+                         (skipstr "echo \"\n")
+                         (apply str (map #(skipstr "\t" % "\n")
+                                         (clojure.string/split (:in flags) #"\n")))
+                         (skipstr "\" | \n")))
+                     (skipstr "ctool " (clojure.string/join " " argv)))})
   (when-not *dry-run*
     (sh/with-programs [ctool]
       (let [argv (conj (into [] argv)
@@ -154,67 +135,98 @@
         ret))))
 
 
-(defn add-ctool-out-to-genv
-  [argv k v]
-  (swap! genv
-    #(assoc % (name k)
-            (let [lines (into []
-                              (-> (ctool argv {:in v})
-                                  :stdout
-                                  (clojure.string/split #"\n")))
-                  out-idx (.indexOf lines "Out: ")
-                  err-idx (.indexOf lines "Err: ")]
-              (loop [idx (inc out-idx)
-                     output nil]
-                (if (= idx err-idx)
-                  output
-                  (let [ln (get lines idx)]
-                    (recur (inc idx)
-                           (str output (if output
-                                         (str "\n" ln)
-                                         ln))))))))))
+(defn parse-ctool-run-output
+  [input file]
+  (let [lines (clojure.string/split input #"\n")
+        dir (condp = file :out "Out: " :err "Err: ")
+        to-fun (fn [lines]
+                 (condp = file
+                   :out (.indexOf lines "Err: ")
+                   :err (let [found
+                              (first
+                                (remove nil?
+                                  (for [x (range (count lines))]
+                                    (let [triple (take 3 (drop x lines))]
+                                      (when (every? clojure.string/blank? triple) x)))))]
+                          (if-not found
+                            (count lines) found))))]
+    (loop [lines lines
+           idx (inc (.indexOf lines dir))
+           to (to-fun lines)
+           output nil]
+      (if (= idx to)
+        (let [sublines (drop (inc idx) lines)]
+          (if (> (.indexOf sublines dir) -1)
+            (recur sublines
+                   (inc (.indexOf sublines dir))
+                   (to-fun sublines)
+                   output)
+            output))
+        (let [ln (nth lines idx)]
+          (recur lines
+                 (inc idx)
+                 to
+                 (str output (if output
+                               (str "\n" ln)
+                               ln))))))))
+
+
+(defn add-ctool-to-genv
+  [ret out & [err]]
+  (let [output (-> ret :stdout)]
+    (when err
+      (swap! genv
+        #(assoc % (name err)
+                (parse-ctool-run-output output :err))))
+    (when out
+      (swap! genv
+        #(assoc % (name out)
+                (parse-ctool-run-output output :out))))
+
+    @(:exit-code ret)))
+
+
+(defn node-list
+  [nodes]
+  (if (instance? Integer nodes)
+    (str nodes)
+    (name nodes)))
 
 
 (defn ctool-run
-  [cluster-name nodes script]
-  (let [argv ["run" cluster-name
-              (if (isa? (class nodes) Integer)
-                (str nodes)
-                (name nodes))
-              "-"]]
-    (if (isa? (class script) String)
-      (ctool argv {:in script})
-      (doall (map
-        (fn [& [[k v] entry]]
-          (add-ctool-out-to-genv argv k v))
-        (into [] script)))
-      )))
+  [bundle]
+  (let [cluster-name (full-cluster-name bundle)
+        nodes (or (:node-list bundle) "all")
+        ret (ctool ["run" cluster-name nodes "-"] {:in (:exec bundle)})]
+    (when ret
+      (add-ctool-to-genv
+        ret
+        (:out bundle)
+        (:err bundle)))))
 
 
 (defn ctool-run-scripts
-  [cluster-name script-maps]
-  (doseq [script-map script-maps
-          [k v] script-map]
-    (ctool-run cluster-name k v)))
+  [cluster bundles]
+  (doseq [bundle bundles]
+    (ctool-run (assoc bundle :cluster-name (:cluster-name cluster)))))
 
 
 (defmacro wrap-binding
   [what & forms]
-  `(binding [*skip* (or *skip* (:skip ~what))]
+  `(binding [*dry-run* (or *dry-run* (:dry-run ~what))
+             *skip* (if (false? (:skip ~what))
+                      false
+                      (or *skip* (:skip ~what)))]
     (binding [*dry-run* (or *dry-run* *skip*)
-               sh/*throw* (or sh/*throw* (:throw ~what))]
+               sh/*throw* (if (false? (:throw ~what))
+                            false
+                            (or sh/*throw* (:throw ~what)))]
       ~@forms)))
 
 
 (defn do-groups
   [fun groups]
   (doseq [collection groups]
-    (when (:checkpoint collection)
-      (doseq [[cluster script-maps] (:checkpoint collection)]
-        (ctool-run-scripts
-          (cluster-name
-            {:cluster-name (name cluster)})
-            script-maps)))
     (let [group (:group collection)]
       (wrap-binding collection
         (doall (pmap fun group)))
@@ -223,109 +235,106 @@
 
 (defn install-product
   [cluster product]
-  (let [cluster-name (cluster-name cluster)
+  (let [cluster-name (full-cluster-name cluster)
         argv (install-argv cluster product)]
     (ctool argv)
-    (ctool-run-scripts cluster-name (:post-install product))
+    (ctool-run-scripts cluster (:post-install product))
+
     ;; TODO: implement other options in the start argv
     (when (:start product)
       (let [argv ["start" cluster-name (:product product)]]
         (ctool argv)
-        (ctool-run-scripts cluster-name (:post-start product))))))
-
-
-(defn add-cluster-ip-to-genv
-  [ln cluster]
-  (swap! genv
-    (fn [old]
-      (let [variable-base (str (clojure.string/replace 
-                                 (:cluster-name cluster) #"-" "_")
-                               "_IP_ADDR_")]
-        (loop [idx 0]
-          (if (get @genv (str variable-base idx))
-            (recur (inc idx))
-            (assoc old
-                   (str variable-base idx)
-                   (second (clojure.string/split ln #": ")))))))))
-
-
-(defn add-cluster-info-to-genv
-  [cluster]
-  (sh/with-programs [ctool]
-    (let [ret (ctool "info" (cluster-name cluster) {:seq true})]
-      (doseq [ln ret]
-        (when (re-find #"public ip" ln)
-          (add-cluster-ip-to-genv ln cluster))))))
+        (ctool-run-scripts cluster (:post-start product))))))
 
 
 (defn provision-cluster
   [cluster]
+  (swap! gclusters (fn [old]
+                     (assoc old
+                            (:cluster-name cluster)
+                            cluster)))
   (wrap-binding cluster
     (let [argv (launch-argv cluster)]
       (ctool argv)
-      (ctool-run-scripts (cluster-name cluster) (:post-launch cluster))
-      ;; add the ip address (etc.) to the genv
-      (add-cluster-info-to-genv cluster)
+      (ctool-run-scripts cluster (:post-launch cluster))
 
       (do-groups
         #(install-product cluster %)
         (-> cluster :products :groups)))))
 
 
-(defn run-test
+(defn run-checkpoint
   [t]
   (wrap-binding t
     (sh/with-programs [bash]
-      (let [test-invocation-string (bash "-c"
-                                         (str "printf \"" (:invocation t) "\"")
-                                         {:env @genv})]
-        (if *dry-run*
-          (log {:stdout (skipstr test-invocation-string)})
-          (let [ret (bash "-c" (:invocation t) {:env @genv :verbose true})]
+      (let [checkpoint-exec-string 
+            (bash "-c"
+              (str "printf \"" (:exec t) "\"")
+              {:env @genv})]
+        (if (and (:cluster-name t)
+                 (not= (:cluster-name t) "localhost"))
+          (ctool-run (assoc t :exec checkpoint-exec-string))
+          (if *dry-run*
+            (log {:stdout (skipstr checkpoint-exec-string)})
+            (let [ret (bash "-c" (:exec t) {:env @genv :verbose true})]
 
-            (when-not (zero? (count (:stdout ret)))
-              (log {:stdout (skipstr test-invocation-string)})
-              (log (:stdout ret)))
+              ;;(log ret)
+              (when-not (zero? (count (:stdout ret)))
+                (log {:stdout (skipstr checkpoint-exec-string)})
+                (log {:stderr (:stdout ret)}))
 
-            (when-not (zero? (count (:stderr ret)))
-              (log {:stdout (skipstr test-invocation-string)})
-              (log {:stderr (:stderr ret)}))
+              (when-not (zero? (count (:stderr ret)))
+                (log {:stdout (skipstr checkpoint-exec-string)})
+                (log {:stderr (:stderr ret)}))
 
-            @(:exit-code ret)))))))
-
-
-(defn help []
-  (println "usage: yar /path/to/profile.yaml (n.b., JSON is valid YAML)"))
+              @(:exit-code ret))))))))
 
 
 (defn run-profile
   [profile]
-  (binding [sh/*throw* (:throw profile)
-            *dry-run* (:dry-run profile)
-            *timestamp* (java.util.Date.
-                          (or (:timestamp profile)
-                              (-> (java.util.Date.) .getTime)))]
+  (wrap-binding profile
 
-    (alter-var-root #'*log-script* (fn [_] (:log-script profile)))
+    (binding [*timestamp* (java.util.Date.
+                            (or (-> profile :timestamp)
+                                (-> (java.util.Date.) .getTime)))]
 
-    (wrap-binding (-> profile :clusters)
-      (log (str "Provisioning clusters in \"" (:name profile) "\" profile:"))
+      (alter-var-root #'*log-script*
+        (fn [old] (if (false? (-> profile :log-script))
+                    false
+                    (or old (-> profile :log-script)))))
+
+      (wrap-binding (-> profile :clusters)
+        (log (str "Provisioning clusters in \"" (-> profile :name) "\" profile:"))
+        
+        (do-groups
+          provision-cluster
+          (-> profile :clusters :groups)))
+
+      (wrap-binding (-> profile :checkpoints)
+        (log (str "Running tests in \"" (-> profile :name) "\" profile:"))
+
+        (do-groups
+          run-checkpoint
+          (-> profile :checkpoints :groups)))
       
-      (do-groups
-        provision-cluster
-        (-> profile :clusters :groups)))
+      )))
 
-    (wrap-binding (-> profile :tests)
-      (log (str "Running tests in \"" (:name profile) "\" profile:"))
 
-      (do-groups
-        run-test
-        (-> profile :tests :groups)))))
+(defn run-profile-tree
+  [tree num-jobs]
+  ;; run the root profile, binding its throw/skip/dry-run
+  ;; create a snapshot of all of the clusters if necessary
+  ;; run each child in parallel with a clone of the snapshots created
+  )
+
+
+(defn help []
+  (println "usage: yar db-spec-string profile-id"))
 
 
 (defn -main
   [& argv]
-  (if (zero? (count argv))
+  (if (empty? argv)
     (do
       (help)
       (System/exit 2))
@@ -339,7 +348,11 @@
                            (help)
                            false))]
         (do
-          (run-profile profile)
-          #_(shutdown-agents))
+          (wrap-binding profile
+            (run-profile profile)
+            (run-profile (yaml/parse-string (slurp "./resources/profile2.yaml"))))
+
+          (Thread/sleep 500)
+          (shutdown-agents))
         (System/exit 100)))))
 

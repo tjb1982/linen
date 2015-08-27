@@ -8,6 +8,8 @@
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [circleci/clj-yaml "0.5.4"]
                  [me.raynes/conch "0.8.0"]
+                 [org.clojure/java.jdbc "0.3.2"]
+                 [org.postgresql/postgresql "9.4-1200-jdbc41"]
                  ]
   :aot :all
   :main yar.core)
