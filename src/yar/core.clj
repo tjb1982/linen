@@ -144,7 +144,7 @@
 
 
 (defn parse-ctool-run-output
-  [input file]
+  [input file & [delimiter]]
   (let [lines (clojure.string/split input #"\n")
         dir (condp = file :out "Out: " :err "Err: ")
         to-fun (fn [lines]
@@ -161,35 +161,38 @@
     (loop [lines lines
            idx (inc (.indexOf lines dir))
            to (to-fun lines)
-           output nil]
+           output nil
+           continuation false]
       (if (= idx to)
         (let [sublines (drop (inc idx) lines)]
           (if (> (.indexOf sublines dir) -1)
             (recur sublines
                    (inc (.indexOf sublines dir))
                    (to-fun sublines)
-                   output)
+                   (str output delimiter)
+                   false)
             output))
         (let [ln (nth lines idx)]
           (recur lines
                  (inc idx)
                  to
-                 (str output (if output
+                 (str output (if continuation
                                (str "\n" ln)
-                               ln))))))))
+                               ln))
+                 true))))))
 
 
 (defn add-ctool-to-genv
-  [ret out & [err]]
+  [ret & [out err delimiter]]
   (let [output (-> ret :stdout)]
     (when err
       (swap! genv
         #(assoc % (name err)
-                (parse-ctool-run-output output :err))))
+                (parse-ctool-run-output output :err delimiter))))
     (when out
       (swap! genv
         #(assoc % (name out)
-                (parse-ctool-run-output output :out))))
+                (parse-ctool-run-output output :out delimiter))))
 
     @(:exit-code ret)))
 
@@ -210,7 +213,8 @@
       (add-ctool-to-genv
         ret
         (:out bundle)
-        (:err bundle)))))
+        (:err bundle)
+        (:delimiter bundle)))))
 
 
 (defn ctool-run-scripts
@@ -271,6 +275,12 @@
         (-> cluster :products :groups)))))
 
 
+(defn add-to-genv
+  [k v]
+  (swap! genv (fn [old]
+                (assoc old k v))))
+
+
 (defn run-checkpoint
   [t]
   (wrap-binding t
@@ -286,11 +296,13 @@
               ;;(log ret)
               (when-not (zero? (count (:stdout ret)))
                 (log {:stdout (skipstr checkpoint-exec-string)})
-                (log {:stderr (:stdout ret)}))
+                (log {:stderr (:stdout ret)})
+                (when (:out t) (add-to-genv (:out t) (:stdout ret))))
 
               (when-not (zero? (count (:stderr ret)))
                 (log {:stdout (skipstr checkpoint-exec-string)})
-                (log {:stderr (:stderr ret)}))
+                (log {:stderr (:stderr ret)})
+                (when (:err t) (add-to-genv (:err t) (:stderr ret))))
 
               @(:exit-code ret))))))))
 
