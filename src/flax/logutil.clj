@@ -1,4 +1,4 @@
-(ns yar.logutil
+(ns flax.logutil
   (:require [clojure.core.async :refer [go-loop chan <! >!!]]
             [me.raynes.conch.low-level :as sh]))
 
