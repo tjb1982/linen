@@ -5,8 +5,8 @@ main:
         interface:
                 SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
                 SPOCK_NODE_CONNECTOR: ~@SPOCK_NODE_CONNECTOR
-                OPSC_BRANCH_NAME: ~@OPSC_BRANCH_NAME
                 SPOCK_NODE_CONFIG: ~@SPOCK_NODE_CONFIG
+                OPSC_BRANCH_NAME: ~@OPSC_BRANCH_NAME
                 OPSC_HOME: ~@OPSC_HOME
         next:
                 - group:

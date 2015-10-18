@@ -99,7 +99,10 @@
   [s env]
   (let [env (merge @genv env)]
     (cond
+      ;; If `s` starts with ~@, then replace it with the data held by the
+      ;; variable (i.e., not a string interpolation of it).
       (.startsWith s "~@") (-> s (subs 2) keyword env)
+      ;; Interpolate.
       :else (render
               (parse s @parser-options)
               env))))
