@@ -23,6 +23,10 @@
   (str "usage: flax path/to/properties.yaml"))
 
 
+(defn bool?
+  [tester]
+  (-> tester type (= java.lang.Boolean)))
+
 (defn die
   [& args]
   (apply println args)
@@ -116,69 +120,93 @@
   (merge c (select-keys m [:throw :skip])))
 
 
+;;(defn do-groups
+;;  [fun m c]
+;;  (let [groups (-> m :groups)]
+;;    ;; run all groups sequentially
+;;    (doall (for [group groups]
+;;      (let [c (assoc-flags c group)]
+;;        ;; run all x in (:group group) in parallel, passing x and the config object as args
+;;        ;; TODO map for now, pmap or core.async later
+;;        (doall (map #(apply fun %)
+;;                    (map (fn [x] [x c])
+;;                         (:group group))))
+;;        )))))
+
+
 (defn do-groups
   [fun m c]
-  (let [groups (-> m :groups)]
-    ;; run all groups sequentially
-    (doall (for [group groups]
-      (let [c (assoc-flags c group)]
-        ;; run all x in (:group group) in parallel, passing x and the config object as args
-        ;; TODO map for now, pmap or core.async later
-        (doall (map #(apply fun %)
-                    (map (fn [x] [x c])
-                         (:group group))))
-        )))))
+  (let [groups (:groups m)]
+    (doall
+      (mapcat
+        #(let [config (assoc-flags c %)]
+          (doall
+            ;; TODO should be pmap
+            (map (fn [member] (apply fun member))
+                 (map (fn [x] [x config])
+                      (:group %)))))
+        groups))))
 
 
 (defn run-checkpoint
   [checkpoint config]
-  (let [c (assoc-flags config checkpoint)
-        cp (swapwalk checkpoint (-> c :env))]
-    (if (:nodes cp)
-      ;; run the checkpoint on some nodes in parallel
+  (let [config (assoc-flags config checkpoint)
+        checkpoint (swapwalk checkpoint (-> config :env))]
+    (if (:nodes checkpoint)
+      ;; Run the checkpoint on some nodes in parallel
       ;; TODO make this run in parallel
       (doall
-        (for [node (:nodes cp)]
-          (-> c :node-manager (get-node node) (invoke cp))))
-      ;; run it on the local host
-      (-> (LocalConnector.) (invoke cp))
+        (map
+          #(-> config :node-manager (get-node %) (invoke checkpoint))
+          (:nodes checkpoint)))
+      ;; Run it on the local host, returning a list as if it were run on
+      ;; potentially several nodes.
+      (list (-> (LocalConnector.) (invoke checkpoint)))
       )))
 
 
 (defn run-module
   [m c]
-  ;; check that the required params exist in the env for this module to run
-  ;; run the module
-  ;; scoop up the "provides" and "requires" values from the local env and put them into a new environment
+  ;; Check that the required params exist in the env for this module to run.
+  ;; Either the param exists, or the module defines a default to use instead.
   (if (some false?
-        (map #(or (and (-> % type (= java.lang.Boolean))
+        (map #(or (and (bool? %)
                        (true? %))
-                  (and (-> % type (not= java.lang.Boolean))
+                  (and (not (bool? %))
                        (not (nil? (-> c :env %)))))
              (map #(or (contains? % :default)
                        (-> % :key keyword))
                   (-> m :requires))))
-    ;; some of the `requires` interfaces are missing, so don't bother running it, and
-    ;; return the fail state
+    ;; If some of the `requires` interfaces are missing, don't bother running it, and
+    ;; return the report as a failure.
     (do
       (println (format "Some required inputs are missing for module `%s`." (:name m)))
-      FAIL)
-    ;; all `requires` interfaces exist, so we're a "go"
+      {:returns '()
+       :env (:env c)
+       :status FAIL})
+    ;; All `requires` interfaces exist, so we're a "go."
+    ;; Run the checkpoints. Each checkpoint run will return its return code and
+    ;; the vars that should be added to the env.
+    ;; Scoop up the "provides" and "requires" values from the local env and put
+    ;; them into a new env.
     (when-let [checkpoints (-> m :checkpoints)]
-      (do-groups run-checkpoint
-                 checkpoints
-                 (assoc-flags c checkpoints)))))
+      (let [returns (do-groups run-checkpoint
+                      checkpoints
+                      (assoc-flags c checkpoints))]
+        (die returns)))))
 
 
 (defn run-patch-tree
-  [p c]
-  (clojure.pprint/pprint p)
+  [patch config]
+  ;;(clojure.pprint/pprint p)
   (let [;; augment the current env with the patch's materialized interface
-        c (assoc c :env (merge (:env c) (:interface p)))
+        config (assoc config :env (merge (:env config) (:interface patch)))
         ;; get the module from its data source
-        module (resolve-module (-> c :data-connector) (-> p :module))
-        ;; each module runs and returns a list of checkpoints materialized with their vars and return values
-        return (run-module module (assoc-flags c p))]
+        module (resolve-module (-> config :data-connector) (-> patch :module))
+        ;; run the main module. Each module returns a report with a new env
+        ;; based on what it requires/provides, and a list of return values
+        ;; for each checkpoint.
+        report (run-module module (assoc-flags config patch))]
     ;; here we want to deal with each patch, determining whether it should be isolated or not.
     ;; If so, then the clusters it should use should be a snapshot of the current clusters. It should, in effect,
     ;; branch away from the current clusters as if it were its own path. And the way to do this is to have every clone/snapshot/whatever
