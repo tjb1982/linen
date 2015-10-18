@@ -120,20 +120,6 @@
   (merge c (select-keys m [:throw :skip])))
 
 
-;;(defn do-groups
-;;  [fun m c]
-;;  (let [groups (-> m :groups)]
-;;    ;; run all groups sequentially
-;;    (doall (for [group groups]
-;;      (let [c (assoc-flags c group)]
-;;        ;; run all x in (:group group) in parallel, passing x and the config object as args
-;;        ;; TODO map for now, pmap or core.async later
-;;        (doall (map #(apply fun %)
-;;                    (map (fn [x] [x c])
-;;                         (:group group))))
-;;        )))))
-
-
 (defn do-groups
   [fun m c]
   (let [groups (:groups m)]
@@ -208,13 +194,6 @@
         ;; for each checkpoint.
         report (run-module module (assoc-flags config patch))]
     ;; here we want to deal with each patch, determining whether it should be isolated or not.
-    ;; If so, then the clusters it should use should be a snapshot of the current clusters. It should, in effect,
-    ;; branch away from the current clusters as if it were its own path. And the way to do this is to have every clone/snapshot/whatever
-    ;; have its own name. With ctool this is going to be awful. But with lxc, we can really make this awesome. But what exactly
-    ;; needs to happen? We need to have a list of clusters at any particular point (that follows this path) and when you come across
-    ;; a directive to isolate it, you have to clone all of these clusters before running any concurrent tests.
-    ;;(doseq [patch (-> p :next)]
-    ;;  (run-patch patch dc cc))
     ))
 
 
