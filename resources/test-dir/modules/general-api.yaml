@@ -1,0 +1,19 @@
+name: General API tests
+isolate: false
+requires:
+        - key: OPSC_HOME
+          description: the path to the ripcord repo, which contains the spock functional tests
+        - key: SPOCK_PUBLIC_IP
+          description: the ip-addr of the node on which spock is running
+description: >
+    Comprehensive endpoint test, tangentially
+    related to a high level "demo" path
+checkpoints:
+    groups:
+        - throw: false
+          group:
+              - description: >
+                    A more or less thorough functional test of the /provisioning/repository_credentials/ endpoint.
+                exec: |
+                    gingham.py $OPSC_HOME/spock/test/functional/api-tests/repository-credentials-test.yaml \
+                        -b http://$SPOCK_PUBLIC_IP:8889/api/v1

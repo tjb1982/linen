@@ -1,0 +1,13 @@
+data-connector: flax-file-connector.core
+program: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/programs/happy-path.yaml
+dry-run: true
+log-script: true
+parser-options:
+        tag-open: "~{"
+        tag-close: "}"
+env:
+        SPOCK_NODE_NAME: spock
+        SPOCK_NODE_CONNECTOR: flax-lxc-connector.core
+        OPSC_BRANCH_NAME: spock-functional-testing
+        OPSC_HOME: ~/ripcord
+
