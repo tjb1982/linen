@@ -1,5 +1,5 @@
 data-connector: flax-file-connector.core
-program: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/programs/happy-path.yaml
+program: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/programs/spock.yaml
 dry-run: true
 log-script: true
 parser-options:
@@ -8,6 +8,8 @@ parser-options:
 env:
         SPOCK_NODE_NAME: spock
         SPOCK_NODE_CONNECTOR: flax-lxc-connector.core
+        SPOCK_NODE_CONFIG:
+                template: ubuntu
         OPSC_BRANCH_NAME: spock-functional-testing
         OPSC_HOME: ~/ripcord
 

@@ -13,7 +13,6 @@
                  [org.clojure/java.jdbc "0.3.2"]
                  [org.postgresql/postgresql "9.4-1200-jdbc41"]
                  [flax-file-connector "0.1.0-SNAPSHOT"]
-                 [flax-ctool-connector "0.1.0-SNAPSHOT"]
                  [flax-lxc-connector "0.1.0-SNAPSHOT"]
                  ]
   :aot :all
