@@ -173,8 +173,11 @@
 (defn run-patch-tree
   [p c]
   (clojure.pprint/pprint p)
-  (let [c (assoc c :env (merge (:env c) (:interface p)))
+  (let [;; augment the current env with the patch's materialized interface
+        c (assoc c :env (merge (:env c) (:interface p)))
+        ;; get the module from its data source
         module (resolve-module (-> c :data-connector) (-> p :module))
+        ;; each module runs and returns a list of checkpoints materialized with their vars and return values
         return (run-module module (assoc-flags c p))]
     ;; here we want to deal with each patch, determining whether it should be isolated or not.
     ;; If so, then the clusters it should use should be a snapshot of the current clusters. It should, in effect,
