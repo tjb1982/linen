@@ -140,7 +140,7 @@
 (defn run-checkpoint
   [checkpoint config]
   (let [config (assoc-flags config checkpoint)
-        checkpoint (swapwalk checkpoint (-> config :env))]
+        checkpoint (swapwalk checkpoint (:env config))]
     (if (:nodes checkpoint)
       ;; Run the checkpoint on some nodes in parallel
       ;; TODO make this run in parallel
@@ -151,7 +151,8 @@
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
       (list (-> (LocalConnector.) (invoke checkpoint)))
-      )))
+      )
+    ))
 
 
 (defn run-module
@@ -159,9 +160,11 @@
   ;; Check that the required params exist in the env for this module to run.
   ;; Either the param exists, or the module defines a default to use instead.
   (if (some false?
-        (map #(or (and (bool? %)
+        (map #(or ;; Is it both boolean and true, signifying a default value exists?
+                  (and (bool? %)
                        (true? %))
-                  (and (not (bool? %))
+                  ;; Or is it a keyword and found in the current env?
+                  (and (keyword? %)
                        (not (nil? (-> c :env %)))))
              (map #(or (contains? % :default)
                        (-> % :key keyword))
@@ -182,17 +185,17 @@
       (let [returns (do-groups run-checkpoint
                       checkpoints
                       (assoc-flags c checkpoints))]
-        (die returns)))))
+        (clojure.pprint/pprint returns)
+        returns))))
 
 
 (defn run-patch-tree
   [patch config]
-  ;;(clojure.pprint/pprint p)
-  (let [;; augment the current env with the patch's materialized interface
+  (let [;; Augment the current env with the patch's materialized interface.
         config (assoc config :env (merge (:env config) (:interface patch)))
-        ;; get the module from its data source
+        ;; Get the module from its data source.
         module (resolve-module (-> config :data-connector) (-> patch :module))
-        ;; run the main module. Each module returns a report with a new env
+        ;; Run the main module. Each module returns a report with a new env
         ;; based on what it requires/provides, and a list of return values
         ;; for each checkpoint.
         report (run-module module (assoc-flags config patch))]
@@ -201,19 +204,17 @@
 
 
 (defn run-program
-  [c]
-  (when-let [main (-> c :program :main)]
-    (let [effective (java.util.Date.
-                      (or (-> c :program :effective)
-                          (-> (java.util.Date.) .getTime)))]
-      (run-patch-tree
-        ;; swap and/or interpolate the variables contained in the patch with
-        ;; the contents of the current env, skipping the `:next` list, as its
-        ;; env will be augmented by the vars created by the parent.
-        (merge main (swapwalk (dissoc main :next) (-> c :env)))
-        ;; this `effective` timestamp will serve as the datetime of last modification
-        ;; as well as the seed for any pseudorandom number generation.
-        (assoc c :effective effective)))))
+  [config]
+  ;; Any program can have only one main entry point.
+  (when-let [main (-> config :program :main)]
+    (run-patch-tree
+      ;; Swap and/or interpolate the variables contained in the patch with
+      ;; the contents of the current env, skipping the `:next` list, as its
+      ;; env will be augmented by the vars created by the parent.
+      (merge main
+             (swapwalk (dissoc main :next)
+                       (:env config)))
+      config)))
 
 
 (defn -main
@@ -246,13 +247,26 @@
                                 (die
                                   "The configuration must have a program property, which must be a path to a valid yaml document:"
                                   (.getMessage e))))
-                    return (run-program (assoc config :program program
-                                                      ;; merge the system env into the local env we will be managing
+                    effective (java.util.Date.
+                                (or (:effective config)
+                                    (-> (java.util.Date.) .getTime)))
+                    return (run-program (assoc config ;; The program itself. A tree of synchronized patches that
+                                                      ;; model changes in the state of the system and various
+                                                      ;; asynchronous interactions.
+                                                      :program program
+                                                      ;; Merge the system env into the local env we will be managing
                                                       :env (merge (into {} (for [[k v] (System/getenv)] [(keyword k) v]))
                                                                   (:env config))
+                                                      ;; This timestamp is also intended to be used (via .getTime)
+                                                      ;; as a seed for any pseudorandom number generation, so that
+                                                      ;; randomized testing can be retested as deterministically
+                                                      ;; as possible.
+                                                      :effective effective
                                                       ;; instantiate a node manager with an empty node map as an atom
-                                                      :node-manager (NodeManager. (atom {}))
-                                                      ;; in the future, database persistence should be supported, with
+                                                      :node-manager (NodeManager. (atom {}) effective 0)
+                                                      ;; Again, the data connector is for resolving a string
+                                                      ;; representation of particular resources. In the future,
+                                                      ;; database persistence should be supported, with
                                                       ;; continued support for file based configuration, too
                                                       :data-connector dc))]
                 ;; allow time for agents to finish logging
