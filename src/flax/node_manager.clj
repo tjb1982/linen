@@ -6,12 +6,12 @@
 (defn resolve-connector
   [namesp]
   (-> namesp symbol require)
-  ((-> namesp (str "/connector") symbol resolve)))
+  (-> namesp (str "/connector") symbol resolve))
 
 
 (defrecord LocalConnector []
   PNodeConnector
-  (create [self node] self)
+  (create [self node full-name] self)
   (destroy [self] nil)
   (invoke [self checkpoint]
     (-> checkpoint :invocation))
@@ -19,30 +19,38 @@
     self))
 
 
-(defrecord NodeManager [nodes]
+(def local-connector (LocalConnector.))
+
+
+(defrecord NodeManager [nodes effective version]
   PNodeManager
   (get-node [self node]
     (cond
-      ;; In the case where you want to run the checkpoint on foreign and
-      ;; the local node.
-      (= node "local") (LocalConnector.)
+      ;; In the case where you want to run the checkpoint on foreign nodes
+      ;; and the local node.
+      (= node "local") local-connector
       ;; If you're only passing a string, the only outcome can be
       ;; retrieving an existing node (or nil).
-      (string? node) (-> @nodes (get node))
+      (string? node) (-> @nodes (get (full-node-name self node)))
       ;; If it's a map, then we can go one of two ways:
       (map? node)
-      (if (contains? @nodes (-> node :name))
+      (if (contains? @nodes (full-node-name self node))
         ;; If a node already exists with the node name, just return it.
-        (-> @nodes (get (-> node :name)))
+        (-> @nodes (get (full-node-name self node)))
         ;; Else, create the node and add it to the list of managed nodes.
-        (let [n (-> node :connector resolve-connector (create node))]
-          (swap! nodes #(assoc % (-> @(:node n) :name) n))
-          n))))
+        (let [ctor (-> node :connector resolve-connector)
+              node (-> (ctor) (create node (full-node-name self node)))]
+          ;; The new node record has a :name which is the full node name.
+          (swap! nodes #(assoc % (-> @(:node node) :name)
+                                 node))
+          node))))
   (remove-node [self node]
     (let [fun (cond
                 (string? node) #(dissoc % node)
                 (map? node) #(dissoc % (-> node :name)))]
       (swap! nodes fun)))
+  (full-node-name [self node]
+    (str (:name node) "-" (.getTime (:effective self)) "-" (:version self)))
   (isolate [self]
     self))
 

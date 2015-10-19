@@ -1,4 +1,5 @@
 data-connector: flax-file-connector.core
+effective: 1444586330418
 program: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/programs/spock.yaml
 dry-run: true
 log-script: true

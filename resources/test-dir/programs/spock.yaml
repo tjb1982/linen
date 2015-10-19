@@ -1,5 +1,4 @@
 name: Spock functional test program
-effective: 1444586330418
 main:
         module: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/modules/spock-init.yaml
         interface:
