@@ -1,99 +1,99 @@
 name: Spock init
 description: >
-	Sets up a spock node and runs a couple of smoketests to verify that it's running as expected.
+    Sets up a spock node and runs a couple of smoketests to verify that it's running as expected.
 requires:
-	- key: SPOCK_NODE_NAME
-	  description: >
-		The name of the single-node cluster created by this module that hosts the spock service.
-		This can then be used to reference the cluster whether it's isolated or not.
-	  default: spock 
-	- key: SPOCK_NODE_CONNECTOR
-	  description: >
-		The namespace where the connector constructor exists to be used for managing the node
-		that spock runs on.
-	  default: flax-lxc-connector.core
-	- key: SPOCK_NODE_CONFIG
-	  description: >
-		Optional configuration information to pass to the node connector, such as
-		the platform, jvm vendor/version, etc. if supported.
-	  default: null
-	- key: OPSC_BRANCH_NAME
-	  description: >
-		The branch that will be used for spock. It is assumed that the tests against
-		spock will be sourced from the same branch/commit as the running server.
-	  default: master
-	- key: OPSC_HOME
-	  description: >
-		The path to the ripcord repo where the spock lib resides on the machine
-		hosting this application (i.e., localhost).
+    - key: SPOCK_NODE_NAME
+      description: >
+        The name of the single-node cluster created by this module that hosts the spock service.
+        This can then be used to reference the cluster whether it's isolated or not.
+      default: spock 
+    - key: SPOCK_NODE_CONNECTOR
+      description: >
+        The namespace where the connector constructor exists to be used for managing the node
+        that spock runs on.
+      default: flax-lxc-connector.core
+    - key: SPOCK_NODE_CONFIG
+      description: >
+        Optional configuration information to pass to the node connector, such as
+        the platform, jvm vendor/version, etc. if supported.
+      default: null
+    - key: OPSC_BRANCH_NAME
+      description: >
+        The branch that will be used for spock. It is assumed that the tests against
+        spock will be sourced from the same branch/commit as the running server.
+      default: master
+    - key: OPSC_HOME
+      description: >
+        The path to the ripcord repo where the spock lib resides on the machine
+        hosting this application (i.e., localhost).
 checkpoints:
-	# applies to all checkpoints
-	throw: true
-	groups:
-		  # applies to all checkpoints in this group
-		- group:
-			  # applies to this checkpoint only
-			- nodes:
-				- name: ~@SPOCK_NODE_NAME
-				  connector: ~@SPOCK_NODE_CONNECTOR
-				  force: false
-				  options: ~@SPOCK_NODE_CONFIG
-			  description: >
-				Clone the ripcord repository (containing the spock source) for the branch "~{OPSC_BRANCH_NAME}"
-				onto the node "~{SPOCK_NODE_NAME}".
-			  invocation: |
-				if [ ! -d ripcord ]; then
-				        git clone git@github.com:riptano/ripcord.git
-				fi
-				cd ripcord
-				git clean -xfd
-				git fetch origin
-				git checkout ~{OPSC_BRANCH_NAME}
-				git pull origin ~{OPSC_BRANCH_NAME}
-				git submodule update --init
-		- group:
-			- nodes:
-				 - name: ~@SPOCK_NODE_NAME
-			  description: >
-				Copies the log4j settings to the resources directory so that it's on the classpath, 
-				creates a temporary directory to store spock-related artifacts, and 
-				builds the spock service as a jar including all of its dependencies.
-			  invocation: |
-				cd ripcord/spock
-				cp ./test/functional/log4.ftest.properties ./resources/log4j.properties
-				mkdir -p /var/tmp/spock
-				lein uberjar
-			- nodes:
-				- name: ~@SPOCK_NODE_NAME
-				  out: SPOCK_PUBLIC_IP
-			  description: Grabs the public ip address of the node running spock.
-			  invocation: dig +short myip.opendns.com @resolver1.opendns.com
-		- group:
-			- nodes:
-				 - name: ~@SPOCK_NODE_NAME
-			  description: >
-				Kills running spock instances, drops/recreates the database,
-				and restarts the spock daemon
-			  invocation: |
-				start-stop-daemon --stop --pidfile /var/tmp/spock/spock.pid
-				pkill -f spock
-				rm -f /var/tmp/spock/spock.db
-				cd ripcord/spock
-				cp ./test/functional/log4j.ftest.properties ./resources/log4j.properties
-				sed -i 's/.*node.callback-address=.*/node.callback-address=http:\/\/~{SPOCK_PUBLIC_IP}:8889/' ./test/functional/spock.properties
-				start-stop-daemon --start --name spock -m --pidfile /var/tmp/spock/spock.pid --background --exec /bin/bash -- \
-					-c 'cd ~/ripcord/spock
-						java -Dspock.configuration=./test/functional/spock.properties \
-							-jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve'
-		- group:
-			- description: >
-				A smoke test that pings Spock at the api base. Checks n times
-				every m seconds before reporting a failure, so that the spock
-				service has a chance to start up completely.
-			  invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.sh ~{SPOCK_PUBLIC_IP}:8889/api/ 20 2
-		- group:
-			- description: >
-				A smoke test that tries the /provisioning/datacenters/ endpoint,
-				waiting 5 seconds for a response
-			  invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.py ~{SPOCK_PUBLIC_IP}
+    # applies to all checkpoints
+    throw: true
+    groups:
+          # applies to all checkpoints in this group
+        - group:
+              # applies to this checkpoint only
+            - nodes:
+                - name: ~@SPOCK_NODE_NAME
+                  connector: ~@SPOCK_NODE_CONNECTOR
+                  force: false
+                  options: ~@SPOCK_NODE_CONFIG
+              description: >
+                Clone the ripcord repository (containing the spock source) for the branch "~{OPSC_BRANCH_NAME}"
+                onto the node "~{SPOCK_NODE_NAME}".
+              invocation: |
+                if [ ! -d ripcord ]; then
+                        git clone git@github.com:riptano/ripcord.git
+                fi
+                cd ripcord
+                git clean -xfd
+                git fetch origin
+                git checkout ~{OPSC_BRANCH_NAME}
+                git pull origin ~{OPSC_BRANCH_NAME}
+                git submodule update --init
+        - group:
+            - nodes:
+                 - name: ~@SPOCK_NODE_NAME
+              description: >
+                Copies the log4j settings to the resources directory so that it's on the classpath, 
+                creates a temporary directory to store spock-related artifacts, and 
+                builds the spock service as a jar including all of its dependencies.
+              invocation: |
+                cd ripcord/spock
+                cp ./test/functional/log4.ftest.properties ./resources/log4j.properties
+                mkdir -p /var/tmp/spock
+                lein uberjar
+            - nodes:
+                - name: ~@SPOCK_NODE_NAME
+                  out: SPOCK_PUBLIC_IP
+              description: Grabs the public ip address of the node running spock.
+              invocation: dig +short myip.opendns.com @resolver1.opendns.com
+        - group:
+            - nodes:
+                 - name: ~@SPOCK_NODE_NAME
+              description: >
+                Kills running spock instances, drops/recreates the database,
+                and restarts the spock daemon
+              invocation: |
+                start-stop-daemon --stop --pidfile /var/tmp/spock/spock.pid
+                pkill -f spock
+                rm -f /var/tmp/spock/spock.db
+                cd ripcord/spock
+                cp ./test/functional/log4j.ftest.properties ./resources/log4j.properties
+                sed -i 's/.*node.callback-address=.*/node.callback-address=http:\/\/~{SPOCK_PUBLIC_IP}:8889/' ./test/functional/spock.properties
+                start-stop-daemon --start --name spock -m --pidfile /var/tmp/spock/spock.pid --background --exec /bin/bash -- \
+                    -c 'cd ~/ripcord/spock
+                        java -Dspock.configuration=./test/functional/spock.properties \
+                            -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve'
+        - group:
+            - description: >
+                A smoke test that pings Spock at the api base. Checks n times
+                every m seconds before reporting a failure, so that the spock
+                service has a chance to start up completely.
+              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.sh ~{SPOCK_PUBLIC_IP}:8889/api/ 20 2
+        - group:
+            - description: >
+                A smoke test that tries the /provisioning/datacenters/ endpoint,
+                waiting 5 seconds for a response
+              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.py ~{SPOCK_PUBLIC_IP}
 

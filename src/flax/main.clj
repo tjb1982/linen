@@ -54,15 +54,6 @@
     (name nodes)))
 
 
-(defn do-groups
-  [fun groups]
-  (doseq [collection groups]
-    (let [group (:group collection)]
-      (wrap-binding collection
-        (doall (pmap fun group)))
-      )))
-
-
 ;;(defn add-to-genv
 ;;  [k v]
 ;;  (swap! genv (fn [old]
@@ -120,7 +111,7 @@
 
 (defn assoc-flags
   [c m]
-  (merge c (select-keys m [:throw :skip])))
+  (merge c (select-keys m [:throw :skip :log])))
 
 
 (defn do-groups
@@ -130,8 +121,7 @@
       (mapcat
         #(let [config (assoc-flags c %)]
           (doall
-            ;; TODO should be pmap
-            (map (fn [member] (apply fun member))
+            (pmap (fn [member] (apply fun member))
                  (map (fn [x] [x config])
                       (:group %)))))
         groups))))
@@ -139,19 +129,27 @@
 
 (defn run-checkpoint
   [checkpoint config]
-  (let [config (assoc-flags config checkpoint)
-        checkpoint (swapwalk checkpoint (:env config))]
+  (let [;; First we snag the flags from the checkpoint
+        ;; and assoc them to the config
+        config (assoc-flags config checkpoint)
+        ;; Then we assoc the config to the checkpoint, so the flags are visible
+        ;; to the `invoke` function. We also swapwalk the checkpoint to make
+        ;; sure the variables are mapped to their appropriate values from the
+        ;; environment.
+        checkpoint (assoc-flags (swapwalk checkpoint (:env config)) config)]
     (if (:nodes checkpoint)
-      ;; Run the checkpoint on some nodes in parallel
-      ;; TODO make this run in parallel
+      ;; Run the checkpoint on some nodes in parallel.
       (doall
-        (map
-          #(-> config :node-manager (get-node %) (invoke checkpoint))
+        (pmap
+          #(let [return (-> config :node-manager (get-node %) (invoke checkpoint))]
+            (if (and (not (nil? return))
+                     (-> config :throw))
+              (assoc checkpoint :exit return)
+              checkpoint))
           (:nodes checkpoint)))
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
-      (list (-> (LocalConnector.) (invoke checkpoint)))
-      )
+      (list (-> (LocalConnector.) (invoke checkpoint))))
     ))
 
 
@@ -172,7 +170,7 @@
     ;; If some of the `requires` interfaces are missing, don't bother running it, and
     ;; return the report as a failure.
     (do
-      (println (format "Some required inputs are missing for module `%s`." (:name m)))
+      (log (format "Some required inputs are missing for module `%s`." (:name m)))
       {:returns '()
        :env (:env c)
        :status FAIL})
@@ -185,7 +183,6 @@
       (let [returns (do-groups run-checkpoint
                       checkpoints
                       (assoc-flags c checkpoints))]
-        (clojure.pprint/pprint returns)
         returns))))
 
 
@@ -198,23 +195,28 @@
         ;; Run the main module. Each module returns a report with a new env
         ;; based on what it requires/provides, and a list of return values
         ;; for each checkpoint.
-        report (run-module module (assoc-flags config patch))]
+        returns (run-module module (assoc-flags config patch))]
     ;; here we want to deal with each patch, determining whether it should be isolated or not.
+    (clojure.pprint/pprint returns)
     ))
 
 
 (defn run-program
   [config]
-  ;; Any program can have only one main entry point.
+  ;; A program's main is a collection of one or more entry points
+  ;; that are all kicked off in parallel.
   (when-let [main (-> config :program :main)]
-    (run-patch-tree
-      ;; Swap and/or interpolate the variables contained in the patch with
-      ;; the contents of the current env, skipping the `:next` list, as its
-      ;; env will be augmented by the vars created by the parent.
-      (merge main
-             (swapwalk (dissoc main :next)
-                       (:env config)))
-      config)))
+    (doall
+      (pmap
+        #(run-patch-tree
+          ;; Swap and/or interpolate the variables contained in the patch with
+          ;; the contents of the current env, skipping the `:next` list, as its
+          ;; env will be augmented by the vars created by the parent.
+          (merge %
+                 (swapwalk (dissoc % :then)
+                           (:env config)))
+          config)
+        main))))
 
 
 (defn -main
@@ -254,7 +256,7 @@
                                                       ;; model changes in the state of the system and various
                                                       ;; asynchronous interactions.
                                                       :program program
-                                                      ;; Merge the system env into the local env we will be managing
+                                                      ;; Merge the system env into the local env we will be managing.
                                                       :env (merge (into {} (for [[k v] (System/getenv)] [(keyword k) v]))
                                                                   (:env config))
                                                       ;; This timestamp is also intended to be used (via .getTime)
@@ -262,20 +264,20 @@
                                                       ;; randomized testing can be retested as deterministically
                                                       ;; as possible.
                                                       :effective effective
-                                                      ;; instantiate a node manager with an empty node map as an atom
+                                                      ;; Instantiate a node manager with an empty node map as an atom.
                                                       :node-manager (NodeManager. (atom {}) effective 0)
                                                       ;; Again, the data connector is for resolving a string
                                                       ;; representation of particular resources. In the future,
                                                       ;; database persistence should be supported, with
-                                                      ;; continued support for file based configuration, too
+                                                      ;; continued support for file based configuration, too.
                                                       :data-connector dc))]
-                ;; allow time for agents to finish logging
+                ;; Allow time for agents to finish logging.
                 (Thread/sleep 1000)
-                ;; kill the agents so the program exits without delay
+                ;; Kill the agents so the program exits without delay.
                 (shutdown-agents)
-                ;; checkpoints should conj nil to :exits if they were successful, anything else otherwise
+                ;; TODO Not sure yet what exactly will be returned and how to handle it.
                 (System/exit (count (remove nil? (:exits return)))))))
           (catch java.io.FileNotFoundException fnfe
-            (die "Dynamically required namespace could not be found:" (.getMessage fnfe)))
+            (die "Resource could not be found:" (.getMessage fnfe)))
           )))))
 

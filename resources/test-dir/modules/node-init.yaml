@@ -1,0 +1,42 @@
+name: Node init
+description: >
+    Launch a node created from a template or cloned from a base.
+requires:
+    - key: NODE_NAME
+    - key: NODE_CONNECTOR
+    - key: NODE_CONFIG
+provides:
+    - key: PUBLIC_IP
+    - key: SSH_PRIVATE_KEY
+checkpoints:
+    throw: true
+    groups:
+        - group:
+            - nodes:
+                - name: ~@NODE_NAME
+                  connector: ~@NODE_CONNECTOR
+                  options: ~@NODE_CONFIG
+                  force: false
+        - group:
+            - nodes:
+                - name: ~@NODE_NAME
+              invocation: mkdir -p ~/.ssh
+            - nodes:
+                - name: ~@NODE_NAME
+              invocation: apt-get -y install dnsutils
+        - group:
+            - nodes:
+                - name: ~@NODE_NAME
+              throw: false
+              invocation: echo -e "\n\n\n" | ssh-keygen -t rsa -N "" -f ~/.ssh/flax_id_rsa
+            - nodes:
+                - name: ~@NODE_NAME
+              invocation: dig +short myip.opendns.com @resolver1.opendns.com
+              out: PUBLIC_IP
+        - group:
+            - nodes:
+                - name: ~@NODE_NAME
+              invocation: cat ~/.ssh/flax_id_rsa
+              log: false
+              out: SSH_PRIVATE_KEY
+

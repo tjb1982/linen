@@ -1,16 +1,16 @@
 data-connector: flax-file-connector.core
 effective: 1444586330418
-program: ~/flax/resources/test-dir/programs/example.yaml
+program: ~/flax/resources/test-dir/programs/spock.yaml
 dry-run: true
 log-script: true
 parser-options:
         tag-open: "~{"
         tag-close: "}"
 env:
-        NODE_NAME: spock
+        SPOCK_NODE_NAME: spock
         NODE_CONNECTOR: flax-lxc-connector.core
         NODE_CONFIG:
-                template: ubuntu
+#                template: ubuntu
                 clone: ubuntu-base
                 retry: 100
                 delay: 100
