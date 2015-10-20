@@ -1,0 +1,32 @@
+name: Example test program
+main:
+        module: ~{TEST_DIR}/modules/example-module.yaml
+        interface:
+                EXAMPLE_NODE_NAME: ~@NODE_NAME
+                EXAMPLE_NODE_CONNECTOR: ~@NODE_CONNECTOR
+                EXAMPLE_NODE_CONFIG: ~@NODE_CONFIG
+#        next:
+#                - group:
+#                        - module: ~{TEST_DIR}/modules/general-api.yaml
+#                          isolate: true
+#                          interface:
+#                                OPSC_HOME: ~@OPSC_HOME
+#                                SPOCK_PUBLIC_IP: ~@SPOCK_PUBLIC_IP
+#                        - module: ~{TEST_DIR}/modules/empty-nodes.yaml
+#                          interface:
+#                                NUM_NODES: 3
+#                                CLUSTER_NAME: empty
+#                          pass:
+#                                - SPOCK_CLUSTER_NAME
+#                                - OPSC_HOME
+#                          next:
+#                                - group:
+#                                        - module: ~{TEST_DIR}/modules/general-provision.yaml
+#                                          interface:
+#                                                OPSC_HOME: ~@OPSC_HOME
+#                                                SPOCK_CLUSTER: ~@SPOCK_CLUSTER_NAME
+#                                                TARGET_IPS: ~@IPS
+#                                                TARGET_SSH_PRIVATE_KEY: ~@SSH_PRIVATE_KEY
+#                                                TARGET_SSH_PORT: 22
+#                                                TARGET_CLUSTER_NAME: ~@CLUSTER_NAME
+#

@@ -36,7 +36,7 @@ checkpoints:
                         - nodes:
                                 - name: ~@SPOCK_NODE_NAME
                                   connector: ~@SPOCK_NODE_CONNECTOR
-                                  force: true
+                                  force: false
                                   options: ~@SPOCK_NODE_CONFIG
                           description: >
                                 Clone the ripcord repository (containing the spock source) for the branch "~{OPSC_BRANCH_NAME}"

@@ -6,6 +6,7 @@
 
 (defprotocol PNodeConnector
   (create [self node full-name])
+  (start [self])
   (destroy [self])
   (invoke [self checkpoint])
   (clone [self]))

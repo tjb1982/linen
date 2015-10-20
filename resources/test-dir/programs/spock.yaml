@@ -1,34 +1,44 @@
 name: Spock functional test program
 main:
-        module: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/modules/spock-init.yaml
-        interface:
-                SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
-                SPOCK_NODE_CONNECTOR: ~@SPOCK_NODE_CONNECTOR
-                SPOCK_NODE_CONFIG: ~@SPOCK_NODE_CONFIG
-                OPSC_BRANCH_NAME: ~@OPSC_BRANCH_NAME
-                OPSC_HOME: ~@OPSC_HOME
-        next:
+        - module: ~{TEST_DIR}/modules/node-init.yaml
+          interface:
+                NODE_NAME: ~@SPOCK_NODE_NAME
+                NODE_CONNECTOR: ~@NODE_CONNECTOR
+                NODE_CONFIG: ~@NODE_CONFIG
+          then:
                 - group:
-                        - module: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/modules/general-api.yaml
-                          isolate: true
+                        - module: ~{TEST_DIR}/modules/spock-init.yaml
                           interface:
-                                OPSC_HOME: ~@OPSC_HOME
-                                SPOCK_PUBLIC_IP: ~@SPOCK_PUBLIC_IP
-                        - module: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/modules/empty-nodes.yaml
-                          interface:
-                                NUM_NODES: 3
-                                CLUSTER_NAME: empty
-                          pass:
-                                - SPOCK_CLUSTER_NAME
-                                - OPSC_HOME
-                          next:
-                                - group:
-                                        - module: /Users/Tbrennan-RMBP/nclk/flax/resources/test-dir/modules/general-provision.yaml
-                                          interface:
-                                                OPSC_HOME: ~@OPSC_HOME
-                                                SPOCK_CLUSTER: ~@SPOCK_CLUSTER_NAME
-                                                TARGET_IPS: ~@IPS
-                                                TARGET_SSH_PRIVATE_KEY: ~@SSH_PRIVATE_KEY
-                                                TARGET_SSH_PORT: 22
-                                                TARGET_CLUSTER_NAME: ~@CLUSTER_NAME
+                                  SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
+                                  OPSC_BRANCH_NAME: ~@OPSC_BRANCH_NAME
+                                  OPSC_HOME: ~@OPSC_HOME
+                          then:
+                                  - group:
+                                          - $$$for:
+                                                  - - test
+                                                    - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
+                                                  - module: ~{TEST_DIR}/modules/gingham.yaml
+                                                    isolate: true
+                                                    interface:
+                                                            TEST: ~@test
+                                                            SPOCK_PUBLIC_IP: ~@SPOCK_PUBLIC_IP
+                                          - $$$for:
+                                                  - - idx
+                                                    - $$$range: [ 0, ~@TARGET_NODE_COUNT ]
+                                                  - module: ~{TEST_DIR}/modules/node-init.yaml
+                                                    interface:
+                                                            NODE_NAME: t~{idx}
+                                                            NODE_CONNECTOR: ~@NODE_CONNECTOR
+                                                            NODE_CONFIG: ~@NODE_CONFIG
+                                            then:
+                                                    - group:
+                                                            - module: ~{TEST_DIR}/modules/general-provision.yaml
+                                                              interface:
+                                                                       OPSC_HOME: ~@OPSC_HOME
+                                                                       SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
+                                                                       TARGET_NODES:
+                                                                               $$$map:
+                                                                                       $$$interpolate: "t~{%}"
+                                                                                       $$$range: [ 0, ~@TARGET_NODE_COUNT ]
+                                                                       TARGET_SSH_PORT: 22
 

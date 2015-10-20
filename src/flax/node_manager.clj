@@ -40,6 +40,7 @@
         ;; Else, create the node and add it to the list of managed nodes.
         (let [ctor (-> node :connector resolve-connector)
               node (-> (ctor) (create node (full-node-name self node)))]
+          (-> node start)
           ;; The new node record has a :name which is the full node name.
           (swap! nodes #(assoc % (-> @(:node node) :name)
                                  node))
@@ -50,7 +51,7 @@
                 (map? node) #(dissoc % (-> node :name)))]
       (swap! nodes fun)))
   (full-node-name [self node]
-    (str (:name node) "-" (.getTime (:effective self)) "-" (:version self)))
+    (str "flax-" (:name node) "-" (.getTime (:effective self)) "-" (:version self)))
   (isolate [self]
     self))
 
