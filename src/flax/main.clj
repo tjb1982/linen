@@ -157,38 +157,37 @@
   [m c]
   ;; Check that the required params exist in the env for this module to run.
   ;; Either the param exists, or the module defines a default to use instead.
-  (if (some false?
-        (map #(or ;; Is it both boolean and true, signifying a default value exists?
-                  (and (bool? %)
-                       (true? %))
-                  ;; Or is it a keyword and found in the current env?
-                  (and (keyword? %)
-                       (not (nil? (-> c :env %)))))
-             (map #(or (contains? % :default)
+  (let [vars (map #(or (contains? % :default)
                        (-> % :key keyword))
-                  (-> m :requires))))
-    ;; If some of the `requires` interfaces are missing, don't bother running it, and
-    ;; return the report as a failure.
-    (log (format "Some required inputs are missing for module `%s`.\n%s" (:name m) (:env c)))
-    ;  {:returns '()
-    ;   :env (:env c)
-    ;   :status FAIL})
-    ;; All `requires` interfaces exist, so we're a "go."
-    ;; Run the checkpoints. Each checkpoint run will return its return code and
-    ;; the vars that should be added to the env.
-    ;; Scoop up the "provides" and "requires" values from the local env and put
-    ;; them into a new env.
-    (when-let [checkpoints (-> m :checkpoints)]
-      (let [returns (do-groups run-checkpoint
-                      checkpoints
-                      (assoc-flags c checkpoints))]
-        returns))))
+                   (-> m :requires))
+        missing (remove #(-> % second true?)
+                        (map (fn [v] [v (or ;; Is it both boolean and true, signifying a default value exists?
+                                            (and (bool? v)
+                                                 (true? v))
+                                            ;; Or is it a keyword and found in the current env?
+                                            (and (keyword? v)
+                                                 (not (nil? (-> c :env v)))))])
+                             vars))]
+    (if-not (empty? missing)
+      ;; If some of the `requires` interfaces are missing, don't bother running it, and
+      ;; return the report as a failure.
+      (log (format "Some required inputs are missing for module `%s`.\n%s\n\nEnvironment:\n%s" (:name m) (into [] (map first missing)) (:env c)))
+      ;; All `requires` interfaces exist, so we're a "go."
+      ;; Run the checkpoints. Each checkpoint run will return its return code and
+      ;; the vars that should be added to the env.
+      ;; Scoop up the "provides" and "requires" values from the local env and put
+      ;; them into a new env.
+      (when-let [checkpoints (-> m :checkpoints)]
+        (let [returns (do-groups run-checkpoint
+                        checkpoints
+                        (assoc-flags c checkpoints))]
+          returns)))))
 
 
 (defn run-patch-tree
   [patch config]
   (let [;; Augment the current env with the patch's materialized interface.
-        config (assoc config :env (merge (:env config) (:interface patch)))
+        config (assoc config :env (merge (:env config) (:in patch)))
         ;; Get the module from its data source.
         module (resolve-module (-> config :data-connector) (-> patch :module))
         ;; Run the main module. Each module returns a report with a new env

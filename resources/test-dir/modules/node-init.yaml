@@ -16,7 +16,7 @@ checkpoints:
                 - name: ~@NODE_NAME
                   connector: ~@NODE_CONNECTOR
                   options: ~@NODE_CONFIG
-                  force: false
+                  force: true
         - group:
             - nodes:
                 - name: ~@NODE_NAME

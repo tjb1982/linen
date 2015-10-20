@@ -10,7 +10,6 @@ env:
         SPOCK_NODE_NAME: spock
         NODE_CONNECTOR: flax-lxc-connector.core
         NODE_CONFIG:
-#                template: ubuntu
                 clone: ubuntu-base
                 retry: 100
                 delay: 100
