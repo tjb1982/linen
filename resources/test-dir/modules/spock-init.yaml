@@ -6,17 +6,7 @@ requires:
       description: >
         The name of the single-node cluster created by this module that hosts the spock service.
         This can then be used to reference the cluster whether it's isolated or not.
-      default: spock 
-    - key: SPOCK_NODE_CONNECTOR
-      description: >
-        The namespace where the connector constructor exists to be used for managing the node
-        that spock runs on.
-      default: flax-lxc-connector.core
-    - key: SPOCK_NODE_CONFIG
-      description: >
-        Optional configuration information to pass to the node connector, such as
-        the platform, jvm vendor/version, etc. if supported.
-      default: null
+      default: spock
     - key: OPSC_BRANCH_NAME
       description: >
         The branch that will be used for spock. It is assumed that the tests against
@@ -35,9 +25,6 @@ checkpoints:
               # applies to this checkpoint only
             - nodes:
                 - name: ~@SPOCK_NODE_NAME
-                  connector: ~@SPOCK_NODE_CONNECTOR
-                  force: false
-                  options: ~@SPOCK_NODE_CONFIG
               description: >
                 Clone the ripcord repository (containing the spock source) for the branch "~{OPSC_BRANCH_NAME}"
                 onto the node "~{SPOCK_NODE_NAME}".
