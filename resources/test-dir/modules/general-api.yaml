@@ -1,19 +1,19 @@
-name: General API tests
+name: Gingham API tests
 isolate: false
 requires:
-        - key: OPSC_HOME
-          description: the path to the ripcord repo, which contains the spock functional tests
-        - key: SPOCK_PUBLIC_IP
-          description: the ip-addr of the node on which spock is running
+	- key: TEST
+	  description: >
+		A path to the test gingham will run.
+	- key: BASE
+	  description: >
+		The API base relative to where the gingham endpoint functions point.
 description: >
-    Comprehensive endpoint test, tangentially
-    related to a high level "demo" path
+	General API test module.
 checkpoints:
-    groups:
-        - throw: false
-          group:
-              - description: >
-                    A more or less thorough functional test of the /provisioning/repository_credentials/ endpoint.
-                exec: |
-                    gingham.py $OPSC_HOME/spock/test/functional/api-tests/repository-credentials-test.yaml \
-                        -b http://$SPOCK_PUBLIC_IP:8889/api/v1
+	groups:
+		- throw: false
+		  group:
+		  	- description: >
+		  		A more or less thorough functional test of the /provisioning/repository_credentials/ endpoint.
+		  	  invocation: gingham.py ~{TEST} -b ~{BASE}
+
