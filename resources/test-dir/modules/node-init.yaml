@@ -24,13 +24,11 @@ checkpoints:
             - nodes:
                 - name: ~@NODE_NAME
               invocation: apt-get -y install dnsutils
-              then:
-                  - group:
-                      - nodes:
-                          - name: ~@NODE_NAME
-                        invocation: dig +short myip.opendns.com @resolver1.opendns.com
-                        out: PUBLIC_IP
         - group:
+            - nodes:
+                - name: ~@NODE_NAME
+              invocation: dig +short myip.opendns.com @resolver1.opendns.com
+              out: PUBLIC_IP
             - nodes:
                 - name: ~@NODE_NAME
               throw: false
