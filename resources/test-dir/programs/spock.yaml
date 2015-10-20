@@ -1,45 +1,45 @@
 name: Spock functional test program
 main:
-	- module: ~{TEST_DIR}/modules/node-init.yaml
-	  interface:
-		NODE_NAME: ~@SPOCK_NODE_NAME
-		NODE_CONNECTOR: ~@NODE_CONNECTOR
-		NODE_CONFIG: ~@NODE_CONFIG
-	  then:
-		- group:
-			- module: ~{TEST_DIR}/modules/spock-init.yaml
-			  interface:
-				SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
-				OPSC_BRANCH_NAME: ~@OPSC_BRANCH_NAME
-				OPSC_HOME: ~@OPSC_HOME
-			  then:
-				- group:
-					- ~(for:
-						- - test
-						  - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
-						- module: ~{TEST_DIR}/modules/gingham.yaml
-						  isolate: true
-						  interface:
-							TEST: ~@test
-							BASE: http://~{SPOCK_PUBLIC_IP}:8889/api/v1
-					- ~(for:
-						- - idx
-						  - ~(range: [ 0, ~@TARGET_NODE_COUNT ]
-						- module: ~{TEST_DIR}/modules/node-init.yaml
-						  interface:
-						          NODE_NAME: t~{idx}
-						          NODE_CONNECTOR: ~@NODE_CONNECTOR
-						          NODE_CONFIG: ~@NODE_CONFIG
-					  then:
-						- group:
-							- module: ~{TEST_DIR}/modules/general-provision.yaml
-							  interface:
-								OPSC_HOME: ~@OPSC_HOME
-								SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
-								TARGET_NODES:
-									~(map:
-										- ~(str:
-											 - ~(interpolate: "t~{%}"
-										- ~(range: [ 0, ~@TARGET_NODE_COUNT ]
-								TARGET_SSH_PORT: 22
-		
+    - module: ~{TEST_DIR}/modules/node-init.yaml
+      interface:
+        NODE_NAME: ~@SPOCK_NODE_NAME
+        NODE_CONNECTOR: ~@NODE_CONNECTOR
+        NODE_CONFIG: ~@NODE_CONFIG
+      then:
+        - group:
+            - module: ~{TEST_DIR}/modules/spock-init.yaml
+              interface:
+                SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
+                OPSC_BRANCH_NAME: ~@OPSC_BRANCH_NAME
+                OPSC_HOME: ~@OPSC_HOME
+              then:
+                - group:
+                    - ~(for:
+                        - - test
+                          - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
+                        - module: ~{TEST_DIR}/modules/gingham.yaml
+                          isolate: true
+                          interface:
+                            TEST: ~@test
+                            BASE: http://~{SPOCK_PUBLIC_IP}:8889/api/v1
+                    - ~(for:
+                        - - idx
+                          - ~(range: [ 0, "~@TARGET_NODE_COUNT" ]
+                        - module: ~{TEST_DIR}/modules/node-init.yaml
+                          interface:
+                                  NODE_NAME: t~{idx}
+                                  NODE_CONNECTOR: ~@NODE_CONNECTOR
+                                  NODE_CONFIG: ~@NODE_CONFIG
+                      then:
+                        - group:
+                            - module: ~{TEST_DIR}/modules/general-provision.yaml
+                              interface:
+                                OPSC_HOME: ~@OPSC_HOME
+                                SPOCK_NODE_NAME: ~@SPOCK_NODE_NAME
+                                TARGET_NODES:
+                                    ~(map:
+                                        - ~(str:
+                                             - ~(interpolate: "t~{_}"
+                                        - ~(range: [ 0, "~@TARGET_NODE_COUNT" ]
+                                TARGET_SSH_PORT: 22
+        

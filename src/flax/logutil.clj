@@ -24,20 +24,9 @@
     (recur)))
 
 
-;;(def logger
-;;  (go-loop []
-;;    (let [msg (<! log-chan)]
-;;      (println (-> msg :proc :process))
-;;      (if-not (instance? java.util.Map msg)
-;;        (println msg)
-;;        (if-let [proc (-> msg :proc :process)]
-;;          (let [out (future (sh/stream-to-out proc :out))
-;;                err (future (sh/stream-to-out proc :err))]
-;;            (println "lalalalala")
-;;            )
-;;
-;;          #_(.write *out* (str msg)))))
-;;    (recur)))
+(defn stream-to-reader
+  [stream]
+  (java.io.BufferedReader. (java.io.InputStreamReader. stream))) 
 
 
 (defn log

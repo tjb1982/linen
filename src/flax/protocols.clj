@@ -16,3 +16,4 @@
   (full-node-name [self node])
   (remove-node [self node])
   (isolate [self]))
+
