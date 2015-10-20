@@ -169,11 +169,10 @@
                   (-> m :requires))))
     ;; If some of the `requires` interfaces are missing, don't bother running it, and
     ;; return the report as a failure.
-    (do
-      (log (format "Some required inputs are missing for module `%s`." (:name m)))
-      {:returns '()
-       :env (:env c)
-       :status FAIL})
+    (log (format "Some required inputs are missing for module `%s`.\n%s" (:name m) (:env c)))
+    ;  {:returns '()
+    ;   :env (:env c)
+    ;   :status FAIL})
     ;; All `requires` interfaces exist, so we're a "go."
     ;; Run the checkpoints. Each checkpoint run will return its return code and
     ;; the vars that should be added to the env.
