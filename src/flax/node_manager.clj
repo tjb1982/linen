@@ -22,7 +22,7 @@
 (def local-connector (LocalConnector.))
 
 
-(defrecord NodeManager [nodes effective version]
+(defrecord NodeManager [nodes effective version logger]
   PNodeManager
   (get-node [self node]
     (cond
@@ -39,7 +39,7 @@
         (-> @nodes (get (full-node-name self node)))
         ;; Else, create the node and add it to the list of managed nodes.
         (let [ctor (-> node :connector resolve-connector)
-              node (-> (ctor) (create node (full-node-name self node)))]
+              node (-> (ctor logger) (create node (full-node-name self node)))]
           (-> node start)
           ;; The new node record has a :name which is the full node name.
           (swap! nodes #(assoc % (-> @(:node node) :name)

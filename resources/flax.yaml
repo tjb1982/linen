@@ -8,6 +8,7 @@ parser-options:
         tag-close: "}"
 env:
         SPOCK_NODE_NAME: spock
+        FORCE: false
         NODE_CONNECTOR: flax-lxc-connector.core
         NODE_CONFIG:
                 clone: ubuntu-base
@@ -15,3 +16,4 @@ env:
                 delay: 100
         TEST_DIR: ~/flax/resources/test-dir
         OPSC_HOME: ~/ripcord
+

@@ -1,50 +1,39 @@
 (ns flax.main
   (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
-            [me.raynes.conch :as sh]
             [clj-yaml.core :as yaml]
-            [clojure.pprint :refer [pprint]]
             [cheshire.core :as json]
-            [flax.core :refer :all]
-            [flax.logutil :refer [log *log-script*]]
+            [clojure.pprint :refer [pprint]]
+            [flax.logutil :refer :all]
             [flax.protocols :refer :all]
             [flax.node-manager]
             [stencil.parser :refer [parse]]
             [stencil.core :refer [render]]
             )
   (:import flax.node_manager.NodeManager
-           flax.node_manager.LocalConnector)
+           flax.node_manager.LocalConnector
+           flax.logutil.StandardLogger)
   (:gen-class))
 
 
-(def parser-options (atom {}))
-(def FAIL 1)
-
+(def parser-options (atom {:tag-open "~{" :tag-close "}"}))
 (def help
   (str "usage: flax path/to/properties.yaml"))
+(def genv (atom {}) #_(atom
+            (into {}
+              (for [[k v] (System/getenv)]
+                [(keyword k) v]))))
+(def logger (StandardLogger.))
 
 
 (defn bool?
   [tester]
   (-> tester type (= java.lang.Boolean)))
 
+
 (defn die
   [& args]
   (apply println args)
-  (System/exit FAIL))
-
-
-(defn skipstr
-  [& args]
-  (str (when *skip* "# ")
-       (apply str args)))
-
-
-(defn bash-printf
-  [string]
-  (sh/with-programs [bash]
-    (bash "-c"
-      (str "printf \"" string "\"")
-    {:env @genv})))
+  (System/exit 1))
 
 
 (defn node-list
@@ -52,38 +41,6 @@
   (if (instance? Integer nodes)
     (str nodes)
     (name nodes)))
-
-
-;;(defn add-to-genv
-;;  [k v]
-;;  (swap! genv (fn [old]
-;;                (assoc old k v))))
-;;
-;;
-;;(defn run-checkpoint
-;;  [t]
-;;  (wrap-binding t
-;;    (sh/with-programs [bash]
-;;      (let [checkpoint-exec-string (bash-printf (:exec t))]
-;;        (if (and (:cluster-name t)
-;;                 (not= (:cluster-name t) "localhost"))
-;;          (ctool-run (assoc t :exec checkpoint-exec-string))
-;;          (if *dry-run*
-;;            (log {:stdout (skipstr checkpoint-exec-string)})
-;;            (let [ret (bash "-c" (:exec t) {:env @genv :verbose true})]
-;;
-;;              ;;(log ret)
-;;              (when-not (zero? (count (:stdout ret)))
-;;                (log {:stdout (skipstr checkpoint-exec-string)})
-;;                (log {:stderr (:stdout ret)})
-;;                (when (:out t) (add-to-genv (:out t) (:stdout ret))))
-;;
-;;              (when-not (zero? (count (:stderr ret)))
-;;                (log {:stdout (skipstr checkpoint-exec-string)})
-;;                (log {:stderr (:stderr ret)})
-;;                (when (:err t) (add-to-genv (:err t) (:stderr ret))))
-;;
-;;              @(:exit-code ret))))))))
 
 
 (defn swap
@@ -111,6 +68,7 @@
 
 (defn assoc-flags
   [c m]
+  (if (seq? m) (die m))
   (merge c (select-keys m [:throw :skip :log])))
 
 
@@ -141,11 +99,12 @@
       ;; Run the checkpoint on some nodes in parallel.
       (doall
         (pmap
-          #(let [return (-> config :node-manager (get-node %) (invoke checkpoint))]
-            (if (and (not (nil? return))
-                     (-> config :throw))
-              (assoc checkpoint :exit return)
-              checkpoint))
+          #(-> config :node-manager
+            (get-node %)
+            (invoke (assoc checkpoint :out [(:out checkpoint)
+                                            (:out %)]
+                                      :err [(:err checkpoint)
+                                            (:err %)])))
           (:nodes checkpoint)))
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
@@ -171,7 +130,12 @@
     (if-not (empty? missing)
       ;; If some of the `requires` interfaces are missing, don't bother running it, and
       ;; return the report as a failure.
-      (log (format "Some required inputs are missing for module `%s`.\n%s\n\nEnvironment:\n%s" (:name m) (into [] (map first missing)) (:env c)))
+      (-> logger
+        (log :error
+          (format "Some required inputs are missing for module `%s`.\n%s\n\nEnvironment:\n%s"
+                  (:name m)
+                  (into [] (map first missing))
+                  (:env c))))
       ;; All `requires` interfaces exist, so we're a "go."
       ;; Run the checkpoints. Each checkpoint run will return its return code and
       ;; the vars that should be added to the env.
@@ -181,22 +145,51 @@
         (let [returns (do-groups run-checkpoint
                         checkpoints
                         (assoc-flags c checkpoints))]
-          returns)))))
+          ;; `returns` is a list of returns.
+          ;; A return is a list of checkpoints, one for each node it was run on.
+          {:returns returns
+           :env (reduce (fn [env return]
+                          (merge env
+                            (reduce (fn [env checkpoint]
+                                      (let [out-arr (-> checkpoint :out :keys first keyword)
+                                            err-arr (-> checkpoint :err :keys first keyword)
+                                            out (-> checkpoint :out :value)
+                                            err (-> checkpoint :err :value)]
+                                        (reduce (fn [env [k v]]
+                                                  (if-not (nil? k)
+                                                    (assoc env k v) env))
+                                                env
+                                                [[out-arr (conj (get env out-arr) out)]
+                                                 [(-> checkpoint :out :keys second keyword) out]
+                                                 [err-arr (conj (get env err-arr) err)]
+                                                 [(-> checkpoint :err :keys second keyword) err]])))
+                                    env
+                                    return)))
+                        {}
+                        returns)}
+          )))))
 
 
 (defn run-patch-tree
   [patch config]
   (let [;; Augment the current env with the patch's materialized interface.
-        config (assoc config :env (merge (:env config) (:in patch)))
+        config (assoc config :env (merge (:env config)
+                                         (swapwalk (:in patch) (:env config))))
         ;; Get the module from its data source.
-        module (resolve-module (-> config :data-connector) (-> patch :module))
+        module (resolve-module (-> config :data-connector) (swap (-> patch :module) (:env config)))
         ;; Run the main module. Each module returns a report with a new env
         ;; based on what it requires/provides, and a list of return values
         ;; for each checkpoint.
-        returns (run-module module (assoc-flags config patch))]
-    ;; here we want to deal with each patch, determining whether it should be isolated or not.
-    (clojure.pprint/pprint returns)
-    ))
+        report (run-module module (assoc-flags config patch))
+        env (merge (:env config) (swapwalk (:out patch) (:env report)))
+        reports (conj
+                  (flatten
+                    (do-groups run-patch-tree
+                      (:then patch)
+                      (assoc-flags (assoc config :env env) (:then patch))))
+                  report)]
+    ;(clojure.pprint/pprint reports)
+    reports))
 
 
 (defn run-program
@@ -211,7 +204,7 @@
           ;; the contents of the current env, skipping the `:next` list, as its
           ;; env will be augmented by the vars created by the parent.
           (merge %
-                 (swapwalk (dissoc % :then)
+                 (swapwalk (dissoc % :then :out)
                            (:env config)))
           config)
         main))))
@@ -255,7 +248,7 @@
                                                       ;; asynchronous interactions.
                                                       :program program
                                                       ;; Merge the system env into the local env we will be managing.
-                                                      :env (merge (into {} (for [[k v] (System/getenv)] [(keyword k) v]))
+                                                      :env (merge @genv
                                                                   (:env config))
                                                       ;; This timestamp is also intended to be used (via .getTime)
                                                       ;; as a seed for any pseudorandom number generation, so that
@@ -263,18 +256,31 @@
                                                       ;; as possible.
                                                       :effective effective
                                                       ;; Instantiate a node manager with an empty node map as an atom.
-                                                      :node-manager (NodeManager. (atom {}) effective 0)
+                                                      :node-manager (NodeManager. (atom {}) effective 0 logger)
                                                       ;; Again, the data connector is for resolving a string
                                                       ;; representation of particular resources. In the future,
                                                       ;; database persistence should be supported, with
                                                       ;; continued support for file based configuration, too.
                                                       :data-connector dc))]
+                ;(let [x (->> return first)]
+                ;  (spit "foo.json" (json/generate-string return)))
                 ;; Allow time for agents to finish logging.
                 (Thread/sleep 1000)
                 ;; Kill the agents so the program exits without delay.
                 (shutdown-agents)
-                ;; TODO Not sure yet what exactly will be returned and how to handle it.
-                (System/exit (count (remove nil? (:exits return)))))))
+                ;; `return` is a list (the main group) of lists of modules
+                (System/exit (count (remove #(or (nil? %)
+                                                 (zero? %))
+                                            (mapcat (fn [entry]
+                                                      (mapcat (fn [module]
+                                                                (mapcat (fn [ret]
+                                                                          (map (fn [node]
+                                                                                 (:exit node))
+                                                                               ret))
+                                                                        (:returns module)))
+                                                              entry))
+                                                    return))))
+                )))
           (catch java.io.FileNotFoundException fnfe
             (die "Resource could not be found:" (.getMessage fnfe)))
           )))))

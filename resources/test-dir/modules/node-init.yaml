@@ -5,6 +5,8 @@ requires:
     - key: NODE_NAME
     - key: NODE_CONNECTOR
     - key: NODE_CONFIG
+    - key: FORCE
+      default: false
 provides:
     - key: PUBLIC_IP
     - key: SSH_PRIVATE_KEY
@@ -16,7 +18,7 @@ checkpoints:
                 - name: ~@NODE_NAME
                   connector: ~@NODE_CONNECTOR
                   options: ~@NODE_CONFIG
-                  force: true
+                  force: ~@FORCE
         - group:
             - nodes:
                 - name: ~@NODE_NAME
@@ -27,8 +29,8 @@ checkpoints:
         - group:
             - nodes:
                 - name: ~@NODE_NAME
+                  out: PUBLIC_IP
               invocation: dig +short myip.opendns.com @resolver1.opendns.com
-              out: PUBLIC_IP
             - nodes:
                 - name: ~@NODE_NAME
               throw: false
@@ -36,7 +38,7 @@ checkpoints:
         - group:
             - nodes:
                 - name: ~@NODE_NAME
+                  out: SSH_PRIVATE_KEY
               invocation: cat ~/.ssh/flax_id_rsa
               log: false
-              out: SSH_PRIVATE_KEY
 
