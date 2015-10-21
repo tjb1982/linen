@@ -6,32 +6,36 @@ main:
       out:
         SPOCK_IP: ~@PUBLIC_IP
       then:
-        - group:
-            - module: ~{TEST_DIR}/modules/spock-init.yaml
-              then:
-                - group:
-                    - ~(for:
-                        - - test
-                          - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
-                        - module: ~{TEST_DIR}/modules/gingham.yaml
-                          isolate: true
-                          in:
-                            TEST: ~@test
-                            BASE: http://~{SPOCK_IP}:8889/api/v1
-                    - ~(for:
-                        - - idx
-                          - ~(range: [ 0, "~@TARGET_NODE_COUNT" ]
-                        - module: ~{TEST_DIR}/modules/node-init.yaml
-                          in:
-                            NODE_NAME: t~{idx}
-                          out:
-                            TARGET_NODES:
-                                ~(conj:
-                                    - ~@TARGET_NODES
-                                    - ~@NODE_NAME
-                      then:
-                        - group:
-                            - module: ~{TEST_DIR}/modules/spock-provision.yaml
-                              in:
-                                TARGET_SSH_PORT: 22
-        
+        groups:
+            - group:
+                - module: ~{TEST_DIR}/modules/spock-init.yaml
+#                  then:
+#                    groups:
+#                        - group:
+#                            - ~(for:
+#                                - - test
+#                                  - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
+#                                - module: ~{TEST_DIR}/modules/gingham.yaml
+#                                  isolate: true
+#                                  in:
+#                                    TEST: ~@test
+#                                    BASE: http://~{SPOCK_IP}:8889/api/v1
+#                            - ~(for:
+#                                - - idx
+#                                  - ~(range:
+#                                      - 0
+#                                      - ~@TARGET_NODE_COUNT
+#                                - module: ~{TEST_DIR}/modules/node-init.yaml
+#                                  in:
+#                                    NODE_NAME: t~{idx}
+#                                  out:
+#                                    TARGET_NODES:
+#                                        ~(conj:
+#                                            - ~@TARGET_NODES
+#                                            - ~@NODE_NAME
+#                              then:
+#                                - group:
+#                                    - module: ~{TEST_DIR}/modules/spock-provision.yaml
+#                                      in:
+#                                        TARGET_SSH_PORT: 22
+#            

@@ -1,11 +1,12 @@
 (ns flax.logutil
   (:require [clojure.core.async :refer [go-loop chan <! >!!]]
+            [flax.protocols :refer [PLogger]]
             [me.raynes.conch.low-level :as sh]))
 
 
 (def ^:dynamic *log-script* nil)
 (def log-chan (chan))
-(def logger
+(def logloop
   (go-loop []
     (let [msg (<! log-chan)
           date (when-not *log-script* (str (java.util.Date.) ": "))]
@@ -29,9 +30,17 @@
   (java.io.BufferedReader. (java.io.InputStreamReader. stream))) 
 
 
-(defn log
+(defn log*
   [msg]
   (>!! log-chan msg)
   (when (:exit-code msg)
     @(:exit-code msg)))
+
+
+(deftype StandardLogger []
+  PLogger
+  (log [self level msg]
+    (cond
+      (string? msg) (log* msg)
+      (sequential? msg) (doall (map log* msg)))))
 

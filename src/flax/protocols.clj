@@ -17,3 +17,5 @@
   (remove-node [self node])
   (isolate [self]))
 
+(defprotocol PLogger
+  (log [self level msg]))
