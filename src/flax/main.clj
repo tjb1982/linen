@@ -50,6 +50,25 @@
       ;; If `s` starts with ~@, then replace it with the data held by the
       ;; variable (i.e., not a string interpolation of it).
       (.startsWith s "~@") (-> s (subs 2) keyword env)
+      ;; If `s` starts with "~$", then replace it with some
+      ;; result of running printf locally (with whatever user is running this
+      ;; process. It runs the process, dumps stdout into the variable by running
+      ;; `$ printf "%s" s`.
+      (.startsWith s "~$")
+      (let [s (subs s 2)
+            proc (-> (Runtime/getRuntime)
+                   (.exec (into-array String
+                            ["bash" "-c"
+                             (str "printf %s \"$("
+                                  (clojure.string/trim s)
+                                  ")\"")])))
+            stdout (stream-to-reader (.getInputStream proc))]
+        (clojure.string/join "\n"
+          (loop [lines []]
+            (let [line (.readLine stdout)]
+              (if (nil? line)
+                lines
+                (recur (conj lines line)))))))
       ;; Interpolate.
       :else (render
               (parse s @parser-options)
@@ -104,7 +123,8 @@
             (invoke (assoc checkpoint :out [(:out checkpoint)
                                             (:out %)]
                                       :err [(:err checkpoint)
-                                            (:err %)])))
+                                            (:err %)]
+                                      :user (:user %))))
           (:nodes checkpoint)))
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
@@ -132,7 +152,7 @@
       ;; return the report as a failure.
       (-> logger
         (log :error
-          (format "Some required inputs are missing for module `%s`.\n%s\n\nEnvironment:\n%s"
+          (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\nEnvironment:\n%s"
                   (:name m)
                   (into [] (map first missing))
                   (:env c))))
@@ -142,9 +162,14 @@
       ;; Scoop up the "provides" and "requires" values from the local env and put
       ;; them into a new env.
       (when-let [checkpoints (-> m :checkpoints)]
-        (let [returns (do-groups run-checkpoint
+        (let [defaults (into {}
+                         (map (fn [x] [(keyword (:key x)) (:default x)])
+                              (:requires m)))
+              config (assoc c :env (merge (swapwalk defaults (:env c))
+                                          (:env c)))
+              returns (do-groups run-checkpoint
                         checkpoints
-                        (assoc-flags c checkpoints))]
+                        (assoc-flags config checkpoints))]
           ;; `returns` is a list of returns.
           ;; A return is a list of checkpoints, one for each node it was run on.
           {:returns returns
@@ -181,7 +206,11 @@
         ;; based on what it requires/provides, and a list of return values
         ;; for each checkpoint.
         report (run-module module (assoc-flags config patch))
+        ;; The new env is made up of the old env, with any keys being
+        ;; overridden by the :out keys in the patch. All the others are
+        ;; ignored. 
         env (merge (:env config) (swapwalk (:out patch) (:env report)))
+        ;; Flat list of reports from the tree of patches.
         reports (conj
                   (flatten
                     (do-groups run-patch-tree
@@ -249,7 +278,7 @@
                                                       :program program
                                                       ;; Merge the system env into the local env we will be managing.
                                                       :env (merge @genv
-                                                                  (:env config))
+                                                                  (swapwalk (:env config) @genv))
                                                       ;; This timestamp is also intended to be used (via .getTime)
                                                       ;; as a seed for any pseudorandom number generation, so that
                                                       ;; randomized testing can be retested as deterministically
