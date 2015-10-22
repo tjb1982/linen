@@ -16,6 +16,9 @@ requires:
       description: >
         The path to the ripcord repo where the spock lib resides on the machine
         hosting this application (i.e., localhost).
+    - key: GITHUB_PRIVATE_KEY
+    - key: SPOCK_USER
+      default: ubuntu
 checkpoints:
     # applies to all checkpoints
     throw: true
@@ -23,12 +26,27 @@ checkpoints:
           # applies to all checkpoints in this group
         - group:
               # applies to this checkpoint only
+            - nodes: 
+                - &spock_user_node
+                  name: ~@SPOCK_NODE_NAME
+                  user: ~@SPOCK_USER
+              log: false
+              invocation: |
+                cd && mkdir -p ~/.ssh
+                chmod 600 ~/.ssh/id_rsa
+                echo "~{GITHUB_PRIVATE_KEY}" > ~/.ssh/id_rsa
+        - group:
             - nodes:
-                - name: ~@SPOCK_NODE_NAME
+                - *spock_user_node
               description: >
                 Clone the ripcord repository (containing the spock source) for the branch "~{OPSC_BRANCH_NAME}"
                 onto the node "~{SPOCK_NODE_NAME}".
               invocation: |
+                cd ~
+                eval "$(ssh-agent -s)"
+                ssh-add ~/.ssh/id_rsa
+                ssh -T git@github.com -o StrictHostKeyChecking=no
+
                 if [ ! -d ripcord ]; then
                         git clone git@github.com:riptano/ripcord.git
                 fi
@@ -37,35 +55,41 @@ checkpoints:
                 git fetch origin
                 git checkout ~{OPSC_BRANCH_NAME}
                 git pull origin ~{OPSC_BRANCH_NAME}
-                git submodule update --init
-        - group:
+                # for access to ctool/automaton
+                #git submodule update --init
             - nodes:
                  - name: ~@SPOCK_NODE_NAME
+                   user: root
+              invocation: |
+                which lein || curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein -o /usr/bin/lein
+                chmod 755 /usr/bin/lein
+        - group:
+            - nodes:
+                 - *spock_user_node
               description: >
                 Copies the log4j settings to the resources directory so that it's on the classpath, 
                 creates a temporary directory to store spock-related artifacts, and 
                 builds the spock service as a jar including all of its dependencies.
               invocation: |
-                cd ripcord/spock
-                cp ./test/functional/log4.ftest.properties ./resources/log4j.properties
+                cd ~/ripcord/spock
+                cp ./test/functional/log4j.ftest.properties ./resources/log4j.properties
                 mkdir -p /var/tmp/spock
+                chmod 755 /var/tmp/spock
                 lein uberjar
-            - nodes:
-                - name: ~@SPOCK_NODE_NAME
-                  out: SPOCK_PUBLIC_IP
-              description: Grabs the public ip address of the node running spock.
-              invocation: dig +short myip.opendns.com @resolver1.opendns.com
         - group:
             - nodes:
                  - name: ~@SPOCK_NODE_NAME
+              invocation: pkill -f spock
+        - group:
+            - nodes:
+                 - *spock_user_node
               description: >
                 Kills running spock instances, drops/recreates the database,
                 and restarts the spock daemon
               invocation: |
                 start-stop-daemon --stop --pidfile /var/tmp/spock/spock.pid
-                pkill -f spock
                 rm -f /var/tmp/spock/spock.db
-                cd ripcord/spock
+                cd ~/ripcord/spock
                 cp ./test/functional/log4j.ftest.properties ./resources/log4j.properties
                 sed -i 's/.*node.callback-address=.*/node.callback-address=http:\/\/~{SPOCK_PUBLIC_IP}:8889/' ./test/functional/spock.properties
                 start-stop-daemon --start --name spock -m --pidfile /var/tmp/spock/spock.pid --background --exec /bin/bash -- \
@@ -73,14 +97,20 @@ checkpoints:
                         java -Dspock.configuration=./test/functional/spock.properties \
                             -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve'
         - group:
-            - description: >
+            - nodes:
+                - *spock_user_node
+              description: >
                 A smoke test that pings Spock at the api base. Checks n times
                 every m seconds before reporting a failure, so that the spock
                 service has a chance to start up completely.
-              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.sh ~{SPOCK_PUBLIC_IP}:8889/api/ 20 2
+              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.sh localhost:8889/api/ 20 2
         - group:
-            - description: >
+            - nodes:
+                - *spock_user_node
+              description: >
                 A smoke test that tries the /provisioning/datacenters/ endpoint,
                 waiting 5 seconds for a response
-              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.py ~{SPOCK_PUBLIC_IP}
+              invocation: |
+                pip install requests
+                ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.py localhost
 
