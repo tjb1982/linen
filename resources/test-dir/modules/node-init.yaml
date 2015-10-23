@@ -5,10 +5,12 @@ requires:
     - key: NODE_NAME
     - key: NODE_CONNECTOR
     - key: NODE_CONFIG
+    - key: IP_INVOCATION
+      default: dig +short myip.opendns.com @resolver1.opendns.com
     - key: FORCE
-      default: false
+      default: true
 provides:
-    - key: PUBLIC_IP
+    - key: IP_ADDRESS
     - key: SSH_PRIVATE_KEY
 checkpoints:
     throw: true
@@ -29,8 +31,8 @@ checkpoints:
         - group:
             - nodes:
                 - name: ~@NODE_NAME
-                  out: PUBLIC_IP
-              invocation: dig +short myip.opendns.com @resolver1.opendns.com
+                  out: IP_ADDRESS
+              invocation: ~@IP_INVOCATION
             - nodes:
                 - name: ~@NODE_NAME
               throw: false

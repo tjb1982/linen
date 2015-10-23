@@ -18,7 +18,7 @@ requires:
         hosting this application (i.e., localhost).
     - key: GITHUB_PRIVATE_KEY
     - key: SPOCK_USER
-      default: ubuntu
+      default: flax
 checkpoints:
     # applies to all checkpoints
     throw: true
@@ -58,7 +58,7 @@ checkpoints:
                 # for access to ctool/automaton
                 #git submodule update --init
             - nodes:
-                 - name: ~@SPOCK_NODE_NAME
+                 - <<: *spock_user_node
                    user: root
               invocation: |
                 which lein || curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein -o /usr/bin/lein
@@ -78,7 +78,8 @@ checkpoints:
                 lein uberjar
         - group:
             - nodes:
-                 - name: ~@SPOCK_NODE_NAME
+                 - <<: *spock_user_node
+                   user: root
               invocation: pkill -f spock
         - group:
             - nodes:
@@ -103,7 +104,7 @@ checkpoints:
                 A smoke test that pings Spock at the api base. Checks n times
                 every m seconds before reporting a failure, so that the spock
                 service has a chance to start up completely.
-              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.sh localhost:8889/api/ 20 2
+              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.sh ~{SPOCK_IP}:8889/api/ 20 2
         - group:
             - nodes:
                 - *spock_user_node
@@ -112,5 +113,5 @@ checkpoints:
                 waiting 5 seconds for a response
               invocation: |
                 pip install requests
-                ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.py localhost
+                ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.py ~{SPOCK_IP}
 

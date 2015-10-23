@@ -49,7 +49,9 @@
     (cond
       ;; If `s` starts with ~@, then replace it with the data held by the
       ;; variable (i.e., not a string interpolation of it).
-      (.startsWith s "~@") (-> s (subs 2) keyword env)
+      (.startsWith s "~@")
+      (let [data (-> s (subs 2) keyword env)]
+        (if (string? data) (clojure.string/trim data) data))
       ;; If `s` starts with "~$", then replace it with some
       ;; result of running printf locally (with whatever user is running this
       ;; process. It runs the process, dumps stdout into the variable by running
@@ -75,19 +77,49 @@
               env))))
 
 
+(declare swapwalk)
+
+
+(defn evaluate
+  [m env]
+  (if (and (map? m)
+           (-> m first key str (subs 1) (.startsWith "~(")))
+    (let [fun (-> m first key str (subs 3) symbol)]
+      (condp = fun
+
+        'if
+        (let [x (conj (swapwalk (-> m first val) env) fun)]
+          (eval x))
+
+        'for
+        (let [coll (-> m first val first second (swapwalk env))]
+          (for [x coll]
+            (let [env (merge env {(keyword (-> m first val first first (swapwalk env))) x})]
+              (swapwalk (-> m first val second) env))))
+
+        (apply (resolve fun) (swapwalk (-> m first val) env))))
+    m))
+
+
 (defn swapwalk
   [m env]
-  (clojure.walk/postwalk
-    #(cond
-       (string? %) (swap % env)
-       (keyword %) (keyword (swap (name %) env))
-       :else %)
-    m))
+  (cond
+    (string? m) (swap m env)
+    (keyword? m) (keyword (swap (subs (str m) 1) env))
+    (symbol? m) (symbol (swap (name m) env))
+    (map? m) (if (-> m first key str (subs 1) (.startsWith "~("))
+               (evaluate m env)
+               (into (empty m)
+                 (map (fn [[k v]]
+                        [(swapwalk k env) (swapwalk v env)])
+                      m)))
+    (coll? m) (reverse (into (empty m) (map (fn [item] (swapwalk item env)) m)))
+    :else m
+    ))
 
 
 (defn assoc-flags
   [c m]
-  (if (seq? m) (die m))
   (merge c (select-keys m [:throw :skip :log])))
 
 
@@ -209,7 +241,9 @@
         ;; The new env is made up of the old env, with any keys being
         ;; overridden by the :out keys in the patch. All the others are
         ;; ignored. 
-        env (merge (:env config) (swapwalk (:out patch) (:env report)))
+        env (merge (:env config) (swapwalk (:out patch)
+                                           (merge (:env config)
+                                                  (:env report))))
         ;; Flat list of reports from the tree of patches.
         reports (conj
                   (flatten
@@ -276,9 +310,7 @@
                                                       ;; model changes in the state of the system and various
                                                       ;; asynchronous interactions.
                                                       :program program
-                                                      ;; Merge the system env into the local env we will be managing.
-                                                      :env (merge @genv
-                                                                  (swapwalk (:env config) @genv))
+                                                      :env (swapwalk (:env config) @genv)
                                                       ;; This timestamp is also intended to be used (via .getTime)
                                                       ;; as a seed for any pseudorandom number generation, so that
                                                       ;; randomized testing can be retested as deterministically
