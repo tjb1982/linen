@@ -3,18 +3,22 @@ effective: 1444586330418
 program: ~/flax/resources/test-dir/programs/spock.yaml
 dry-run: true
 log-script: true
-parser-options:
-        tag-open: "~{"
-        tag-close: "}"
 env:
-        SPOCK_NODE_NAME: spock
-        #FORCE: true
-        NODE_CONNECTOR: flax-lxc-connector.core
-        NODE_CONFIG:
-                clone: ubuntu-base
-                retry: 100
-                delay: 100
-        TEST_DIR: ~/flax/resources/test-dir
-        OPSC_HOME: ~/ripcord
-        OPSC_BRANCH_NAME: yar-2-compat
-        GITHUB_PRIVATE_KEY: ~$ cat ~/.ssh/id_rsa
+    SPOCK_NODE_NAME: spock
+    SPOCK_USER: ubuntu
+    FORCE: false
+    PRIVATE_IP:
+            ~(read-string:
+                    - >
+                            ~$ echo `dig +short myip.opendns.com @resolver1.opendns.com` |
+                            xargs ping -c 3 -t 5 &> /dev/null && echo false || echo true
+    NODE_CONNECTOR: flax-lxc-connector.core
+    NODE_CONFIG:
+            clone: ubuntu-base
+            retry: 100
+            delay: 100
+    TEST_DIR: ~/flax/resources/test-dir
+    OPSC_HOME: ~/ripcord
+    OPSC_BRANCH_NAME: yar-2-compat
+    GITHUB_PRIVATE_KEY: ~$ cat ~/.ssh/id_rsa
+

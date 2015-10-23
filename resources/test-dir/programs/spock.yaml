@@ -3,8 +3,13 @@ main:
     - module: ~{TEST_DIR}/modules/node-init.yaml
       in:
         NODE_NAME: ~@SPOCK_NODE_NAME
+        IP_INVOCATION:
+            ~(if:
+                - ~@PRIVATE_IP
+                - hostname -I
+                - dig +short myip.opendns.com @resolver1.opendns.com
       out:
-        SPOCK_IP: ~@PUBLIC_IP
+        SPOCK_IP: ~@IP_ADDRESS
       then:
         groups:
             - group:
@@ -33,9 +38,8 @@ main:
 #                                        ~(conj:
 #                                            - ~@TARGET_NODES
 #                                            - ~@NODE_NAME
-#                              then:
-#                                - group:
-#                                    - module: ~{TEST_DIR}/modules/spock-provision.yaml
-#                                      in:
-#                                        TARGET_SSH_PORT: 22
+#                        - group:
+#                            - module: ~{TEST_DIR}/modules/spock-provision.yaml
+#                              in:
+#                                TARGET_SSH_PORT: 22
 #            
