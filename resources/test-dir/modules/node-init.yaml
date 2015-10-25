@@ -8,7 +8,7 @@ requires:
     - key: IP_INVOCATION
       default: dig +short myip.opendns.com @resolver1.opendns.com
     - key: FORCE
-      default: true
+      default: false
 provides:
     - key: IP_ADDRESS
     - key: SSH_PRIVATE_KEY

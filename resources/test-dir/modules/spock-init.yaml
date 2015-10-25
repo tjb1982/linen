@@ -6,16 +6,13 @@ requires:
       description: >
         The name of the single-node cluster created by this module that hosts the spock service.
         This can then be used to reference the cluster whether it's isolated or not.
-      default: spock
+    - key: SPOCK_HOSTNAME
+      default: localhost
     - key: OPSC_BRANCH_NAME
       description: >
         The branch that will be used for spock. It is assumed that the tests against
         spock will be sourced from the same branch/commit as the running server.
       default: master
-    - key: OPSC_HOME
-      description: >
-        The path to the ripcord repo where the spock lib resides on the machine
-        hosting this application (i.e., localhost).
     - key: GITHUB_PRIVATE_KEY
     - key: SPOCK_USER
       default: flax
@@ -92,26 +89,9 @@ checkpoints:
                 rm -f /var/tmp/spock/spock.db
                 cd ~/ripcord/spock
                 cp ./test/functional/log4j.ftest.properties ./resources/log4j.properties
-                sed -i 's/.*node.callback-address=.*/node.callback-address=http:\/\/~{SPOCK_PUBLIC_IP}:8889/' ./test/functional/spock.properties
+                sed -i 's/.*node.callback-address=.*/node.callback-address=http:\/\/~{SPOCK_HOSTNAME}:8889/' ./test/functional/spock.properties
                 start-stop-daemon --start --name spock -m --pidfile /var/tmp/spock/spock.pid --background --exec /bin/bash -- \
                     -c 'cd ~/ripcord/spock
                         java -Dspock.configuration=./test/functional/spock.properties \
                             -jar ./target/spock-0.1.0-SNAPSHOT-standalone.jar http serve'
-        - group:
-            - nodes:
-                - *spock_user_node
-              description: >
-                A smoke test that pings Spock at the api base. Checks n times
-                every m seconds before reporting a failure, so that the spock
-                service has a chance to start up completely.
-              invocation: ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.sh ~{SPOCK_IP}:8889/api/ 20 2
-        - group:
-            - nodes:
-                - *spock_user_node
-              description: >
-                A smoke test that tries the /provisioning/datacenters/ endpoint,
-                waiting 5 seconds for a response
-              invocation: |
-                pip install requests
-                ~{OPSC_HOME}/spock/test/functional/smoketests/smoke-test.py ~{SPOCK_IP}
 
