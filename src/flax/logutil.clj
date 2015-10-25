@@ -5,12 +5,37 @@
 
 
 (def ^:dynamic *log-script* nil)
-(def log-chan (chan))
+(def log-chan (chan 4))
+(defn log*
+  [msg]
+  (>!! log-chan msg)
+  (when (:exit-code msg)
+    @(:exit-code msg)))
+
+
+(defn stream-to-reader
+  [stream]
+  (java.io.BufferedReader. (java.io.InputStreamReader. stream))) 
+
+
 (def logloop
   (go-loop []
     (let [msg (<! log-chan)
           date (when-not *log-script* (str (java.util.Date.) ": "))]
-      (if-not (instance? java.util.Map msg)
+      (condp instance? msg
+        java.io.InputStream
+        (log* (stream-to-reader msg))
+
+        java.io.BufferedReader
+        (go-loop [reader msg]
+          (when-let [line (.readLine reader)]
+            (do (println date "### " line)
+                (recur reader))))
+
+        String
+        (println (str date "### " msg))
+        )
+      #_(if-not (instance? java.util.Map msg)
         (println (str date "### " msg))
         (do
           (let [out (:stdout msg)]
@@ -23,18 +48,6 @@
                 (doseq [ln (clojure.string/split err #"\n")]
                   (println (str date (when *log-script* "# ") ln)))))))))
     (recur)))
-
-
-(defn stream-to-reader
-  [stream]
-  (java.io.BufferedReader. (java.io.InputStreamReader. stream))) 
-
-
-(defn log*
-  [msg]
-  (>!! log-chan msg)
-  (when (:exit-code msg)
-    @(:exit-code msg)))
 
 
 (deftype StandardLogger []

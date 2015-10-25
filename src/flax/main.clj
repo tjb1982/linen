@@ -52,18 +52,13 @@
       (.startsWith s "~@")
       (let [data (-> s (subs 2) keyword env)]
         (if (string? data) (clojure.string/trim data) data))
-      ;; If `s` starts with "~$", then replace it with some
-      ;; result of running printf locally (with whatever user is running this
-      ;; process. It runs the process, dumps stdout into the variable by running
-      ;; `$ printf "%s" s`.
+      ;; If `s` starts with "~$", then replace it with the
+      ;; stdout result of running the script locally.
       (.startsWith s "~$")
       (let [s (subs s 2)
             proc (-> (Runtime/getRuntime)
                    (.exec (into-array String
-                            ["bash" "-c"
-                             (str "printf %s \"$("
-                                  (clojure.string/trim s)
-                                  ")\"")])))
+                            ["bash" "-c" (clojure.string/trim s)])))
             stdout (stream-to-reader (.getInputStream proc))]
         (clojure.string/join "\n"
           (loop [lines []]
@@ -181,7 +176,7 @@
                              vars))]
     (if-not (empty? missing)
       ;; If some of the `requires` interfaces are missing, don't bother running it, and
-      ;; return the report as a failure.
+      ;; return nil.
       (-> logger
         (log :error
           (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\nEnvironment:\n%s"
@@ -259,18 +254,29 @@
   [config]
   ;; A program's main is a collection of one or more entry points
   ;; that are all kicked off in parallel.
-  (when-let [main (-> config :program :main)]
-    (doall
-      (pmap
-        #(run-patch-tree
-          ;; Swap and/or interpolate the variables contained in the patch with
-          ;; the contents of the current env, skipping the `:next` list, as its
-          ;; env will be augmented by the vars created by the parent.
-          (merge %
-                 (swapwalk (dissoc % :then :out)
-                           (:env config)))
-          config)
-        main))))
+  (let [program (try
+                  (resolve-program (:data-connector config) (:program config))
+                  (catch Exception e
+                    (die
+                      "The configuration must have a program property, which must be a path to a valid yaml document:"
+                      (.getMessage e))))]
+
+    (when-let [main (:main program)]
+      (doall
+        ;(pmap
+        ;  #(evaluate % config)
+        ;   main)
+        (pmap
+          #(run-patch-tree
+            ;; Swap and/or interpolate the variables contained in the patch with
+            ;; the contents of the current env, skipping the `:next` list and
+            ;; the `:then` property, as their env will be augmented by the vars
+            ;; created by the parent.
+            (merge %
+                   (swapwalk (dissoc % :then :out)
+                             (:env config)))
+            config)
+          main)))))
 
 
 (defn -main
@@ -297,20 +303,10 @@
               ;; we can't proceed without any way of resolving the location of the program
               (die (format "Constructor for data connector `%s` not found" (-> config :data-connector)))
               (let [dc (dc-ctor)
-                    program (try
-                              (resolve-program dc (:program config))
-                              (catch Exception e
-                                (die
-                                  "The configuration must have a program property, which must be a path to a valid yaml document:"
-                                  (.getMessage e))))
                     effective (java.util.Date.
                                 (or (:effective config)
                                     (-> (java.util.Date.) .getTime)))
-                    return (run-program (assoc config ;; The program itself. A tree of synchronized patches that
-                                                      ;; model changes in the state of the system and various
-                                                      ;; asynchronous interactions.
-                                                      :program program
-                                                      :env (swapwalk (:env config) @genv)
+                    return (run-program (assoc config :env (swapwalk (:env config) @genv)
                                                       ;; This timestamp is also intended to be used (via .getTime)
                                                       ;; as a seed for any pseudorandom number generation, so that
                                                       ;; randomized testing can be retested as deterministically
