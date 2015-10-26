@@ -72,6 +72,7 @@ checkpoints:
                 cp ./test/functional/log4j.ftest.properties ./resources/log4j.properties
                 mkdir -p /var/tmp/spock
                 chmod 755 /var/tmp/spock
+                lein clean
                 lein uberjar
         - group:
             - nodes:

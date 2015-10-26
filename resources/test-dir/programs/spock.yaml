@@ -10,15 +10,24 @@ main:
                 - dig +short myip.opendns.com @resolver1.opendns.com
       out:
         SPOCK_HOSTNAME: ~@IP_ADDRESS
+
       then:
-        groups:
-            - group:
-                - module: ~{TEST_DIR}/modules/spock-init.yaml
-                  in:
+        - - module: ~{TEST_DIR}/modules/spock-init.yaml
+            in:
+            then:
+              - - module: ~{TEST_DIR}/modules/spock-smoketest.yaml
                   then:
-                    groups:
-                        - group:
-                            - module: ~{TEST_DIR}/modules/spock-smoketest.yaml
+                    - - ~(for:
+                          - - test
+                            - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
+                          - module: ~{TEST_DIR}/modules/gingham.yaml
+                            isolate: true
+                            in:
+                              TEST: ~@test
+                              BASE: http://~{SPOCK_HOSTNAME}:8889/api/v1
+                              NODE_NAME: ~@SPOCK_NODE_NAME
+                              NODE_USER: ~@SPOCK_USER
+
 #                              then:
 #                                - ~(for:
 #                                    - - test
