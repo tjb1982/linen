@@ -72,45 +72,7 @@
               env))))
 
 
-(declare swapwalk)
-
-
-(defn evaluate
-  [m env]
-  (if (and (map? m)
-           (-> m first key str (subs 1) (.startsWith "~(")))
-    (let [fun (-> m first key str (subs 3) symbol)]
-      (condp = fun
-
-        'if
-        (let [x (conj (swapwalk (-> m first val) env) fun)]
-          (eval x))
-
-        'for
-        (let [coll (-> m first val first second (swapwalk env))]
-          (for [x coll]
-            (let [env (merge env {(keyword (-> m first val first first (swapwalk env))) x})]
-              (swapwalk (-> m first val second) env))))
-
-        (apply (resolve fun) (swapwalk (-> m first val) env))))
-    m))
-
-
-(defn swapwalk
-  [m env]
-  (cond
-    (string? m) (swap m env)
-    (keyword? m) (keyword (swap (subs (str m) 1) env))
-    (symbol? m) (symbol (swap (name m) env))
-    (map? m) (if (-> m first key str (subs 1) (.startsWith "~("))
-               (evaluate m env)
-               (into (empty m)
-                 (map (fn [[k v]]
-                        [(swapwalk k env) (swapwalk v env)])
-                      m)))
-    (coll? m) (reverse (into (empty m) (map (fn [item] (swapwalk item env)) m)))
-    :else m
-    ))
+(declare evaluate)
 
 
 (defn assoc-flags
@@ -118,7 +80,7 @@
   (merge c (select-keys m [:throw :skip :log])))
 
 
-(defn do-groups
+#_(defn do-config-groups
   [fun m c]
   (let [groups (:groups m)]
     (doall
@@ -130,6 +92,21 @@
                       (:group %)))))
         groups))))
 
+(defn do-groups
+  [fun m config]
+  (doall
+    (mapcat
+      #(if (map? %)
+        (let [config (assoc-flags config %)]
+          (doall
+            (pmap (fn [member] (apply fun member))
+                  (map (fn [x] [x config])
+                       (:group %)))))
+        (doall
+          (pmap (fn [member] (apply fun member))
+                (map (fn [x] [x config])
+                     %))))
+      (if (map? m) (:groups m) m))))
 
 (defn run-checkpoint
   [checkpoint config]
@@ -137,10 +114,10 @@
         ;; and assoc them to the config
         config (assoc-flags config checkpoint)
         ;; Then we assoc the config to the checkpoint, so the flags are visible
-        ;; to the `invoke` function. We also swapwalk the checkpoint to make
+        ;; to the `invoke` function. We also evaluate the checkpoint to make
         ;; sure the variables are mapped to their appropriate values from the
         ;; environment.
-        checkpoint (assoc-flags (swapwalk checkpoint (:env config)) config)]
+        checkpoint (assoc-flags (evaluate checkpoint config) config)]
     (if (:nodes checkpoint)
       ;; Run the checkpoint on some nodes in parallel.
       (doall
@@ -192,7 +169,7 @@
         (let [defaults (into {}
                          (map (fn [x] [(keyword (:key x)) (:default x)])
                               (:requires m)))
-              config (assoc c :env (merge (swapwalk defaults (:env c))
+              config (assoc c :env (merge (evaluate defaults c)
                                           (:env c)))
               returns (do-groups run-checkpoint
                         checkpoints
@@ -222,32 +199,72 @@
           )))))
 
 
-(defn run-patch-tree
-  [patch config]
-  (let [;; Augment the current env with the patch's materialized interface.
-        config (assoc config :env (merge (:env config)
-                                         (swapwalk (:in patch) (:env config))))
-        ;; Get the module from its data source.
-        module (resolve-module (-> config :data-connector) (swap (-> patch :module) (:env config)))
-        ;; Run the main module. Each module returns a report with a new env
-        ;; based on what it requires/provides, and a list of return values
-        ;; for each checkpoint.
-        report (run-module module (assoc-flags config patch))
-        ;; The new env is made up of the old env, with any keys being
-        ;; overridden by the :out keys in the patch. All the others are
-        ;; ignored. 
-        env (merge (:env config) (swapwalk (:out patch)
-                                           (merge (:env config)
-                                                  (:env report))))
-        ;; Flat list of reports from the tree of patches.
-        reports (conj
-                  (flatten
-                    (do-groups run-patch-tree
-                      (:then patch)
-                      (assoc-flags (assoc config :env env) (:then patch))))
-                  report)]
-    ;(clojure.pprint/pprint reports)
-    reports))
+(defn evaluate
+  [m config]
+  (cond
+    (string? m)
+    (swap m (:env config))
+
+    (keyword? m)
+    (keyword (swap (subs (str m) 1) (:env config)))
+
+    (symbol? m)
+    (symbol (swap (name m) (:env config)))
+
+    (map? m)
+    (cond
+      ;; Functions and special forms
+      (-> m first key str (subs 1) (.startsWith "~("))
+      (let [fun (-> m first key str (subs 3) symbol)]
+        (condp = fun
+          'if
+          (eval (conj (evaluate (-> m first val) config) fun))
+          'for
+          (let [coll (-> m first val first second (evaluate config))]
+            (for [x coll]
+              (let [env (merge (:env config) {(keyword (-> m first val ffirst (evaluate config))) x})]
+                (evaluate (-> m first val second) (assoc config :env env)))))
+          ;; Functions
+          (apply (resolve fun) (evaluate (-> m first val) config))))
+
+      ;; Modules
+      (contains? m :module)
+      (let [config (assoc config :env (merge (:env config)
+                                             (evaluate (:in m) config)))
+            module (resolve-module (:data-connector config) (evaluate (:module m) config))
+            ;; Run the module. Each module returns a report with a new env
+            ;; based on what it requires/provides, and a list of return values
+            ;; for each checkpoint.
+            report (run-module module (assoc-flags config m))
+            ;; The new env is made up of the old env, with any keys being
+            ;; overridden by the :out keys in the patch. All the others are
+            ;; ignored.
+            env (merge (:env config) (evaluate (:out m)
+                                               (assoc config :env (merge (:env config)
+                                                                         (:env report)))))
+            ;; Flat list of reports from the tree of patches.
+            reports (conj
+                      (flatten
+                        (do-groups evaluate
+                          (:then m)
+                          (if (map? (:then m))
+                            (assoc-flags (assoc config :env env) (:then m))
+                            (assoc config :env env))))
+                      report)]
+        (assoc m :reports reports))
+
+      ;; All other maps
+      :else
+      (into (empty m)
+        (map (fn [[k v]]
+               [(evaluate k config) (evaluate v config)])
+             m)))
+
+    ;; Other collections
+    (coll? m)
+    (reverse (into (empty m) (map (fn [item] (evaluate item config)) m)))
+    
+    :else m))
 
 
 (defn run-program
@@ -263,20 +280,9 @@
 
     (when-let [main (:main program)]
       (doall
-        ;(pmap
-        ;  #(evaluate % config)
-        ;   main)
         (pmap
-          #(run-patch-tree
-            ;; Swap and/or interpolate the variables contained in the patch with
-            ;; the contents of the current env, skipping the `:next` list and
-            ;; the `:then` property, as their env will be augmented by the vars
-            ;; created by the parent.
-            (merge %
-                   (swapwalk (dissoc % :then :out)
-                             (:env config)))
-            config)
-          main)))))
+          #(evaluate % config)
+           main)))))
 
 
 (defn -main
@@ -302,11 +308,10 @@
             (if-not dc-ctor
               ;; we can't proceed without any way of resolving the location of the program
               (die (format "Constructor for data connector `%s` not found" (-> config :data-connector)))
-              (let [dc (dc-ctor)
-                    effective (java.util.Date.
+              (let [effective (java.util.Date.
                                 (or (:effective config)
                                     (-> (java.util.Date.) .getTime)))
-                    return (run-program (assoc config :env (swapwalk (:env config) @genv)
+                    return (run-program (assoc config :env (evaluate (:env config) config)
                                                       ;; This timestamp is also intended to be used (via .getTime)
                                                       ;; as a seed for any pseudorandom number generation, so that
                                                       ;; randomized testing can be retested as deterministically
@@ -318,9 +323,9 @@
                                                       ;; representation of particular resources. In the future,
                                                       ;; database persistence should be supported, with
                                                       ;; continued support for file based configuration, too.
-                                                      :data-connector dc))]
-                ;(let [x (->> return first)]
-                ;  (spit "foo.json" (json/generate-string return)))
+                                                      :data-connector (dc-ctor)))]
+                (let [x (->> return first)]
+                  (spit "foo.json" (json/generate-string return)))
                 ;; Allow time for agents to finish logging.
                 (Thread/sleep 1000)
                 ;; Kill the agents so the program exits without delay.
