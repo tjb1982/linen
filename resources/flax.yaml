@@ -1,6 +1,7 @@
 data-connector: flax-file-connector.core
 effective: 1444586330418
 program: ~/flax/resources/test-dir/programs/spock.yaml
+#program: ~/flax/resources/test-dir/programs/example.yaml
 dry-run: true
 log-script: true
 env:
@@ -17,4 +18,5 @@ env:
         delay: 100
     TEST_DIR: ~/flax/resources/test-dir
     GITHUB_PRIVATE_KEY: ~$ cat ~/.ssh/id_rsa
+    TARGET_NODE_COUNT: 3
 

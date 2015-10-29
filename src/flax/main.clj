@@ -80,18 +80,6 @@
   (merge c (select-keys m [:throw :skip :log])))
 
 
-#_(defn do-config-groups
-  [fun m c]
-  (let [groups (:groups m)]
-    (doall
-      (mapcat
-        #(let [config (assoc-flags c %)]
-          (doall
-            (pmap (fn [member] (apply fun member))
-                 (map (fn [x] [x config])
-                      (:group %)))))
-        groups))))
-
 (defn do-groups
   [fun m config]
   (doall
@@ -144,12 +132,13 @@
                        (-> % :key keyword))
                    (-> m :requires))
         missing (remove #(-> % second true?)
-                        (map (fn [v] [v (or ;; Is it both boolean and true, signifying a default value exists?
-                                            (and (bool? v)
-                                                 (true? v))
-                                            ;; Or is it a keyword and found in the current env?
-                                            (and (keyword? v)
-                                                 (not (nil? (-> c :env v)))))])
+                        (map (fn [v]
+                               [v (or ;; Is it both boolean and true, signifying a default value exists?
+                                      (and (bool? v)
+                                           (true? v))
+                                      ;; Or is it a keyword and found in the current env?
+                                      (and (keyword? v)
+                                           (not (nil? (-> c :env v)))))])
                              vars))]
     (if-not (empty? missing)
       ;; If some of the `requires` interfaces are missing, don't bother running it, and
@@ -175,7 +164,11 @@
                         checkpoints
                         (assoc-flags config checkpoints))]
           ;; `returns` is a list of returns.
-          ;; A return is a list of checkpoints, one for each node it was run on.
+          ;; A return is a list of done checkpoints, one for each node it was run on.
+          ;; The :env here is only referring to the new environment created by
+          ;; this module; it's the responsibility of the calling code to merge
+          ;; it with any more comprehensive environment before running code that
+          ;; depends on the these values.
           {:returns returns
            :env (reduce (fn [env return]
                           (merge env
@@ -199,6 +192,30 @@
           )))))
 
 
+(defn extract
+  [m & [env]]
+  (cond
+
+    (map? m)
+    (if-let [report (:report m)]
+      (let [out (evaluate (:out m)
+                          {:env (merge env
+                                       (-> m :report :env))})]
+        (merge env out))
+      (reduce
+        (fn [env [k v]]
+          (merge env (extract v env)))
+        env m))
+
+    (coll? m)
+    (reduce
+      (fn [env x]
+        (extract x env))
+      env m)
+
+    :else env))
+
+
 (defn evaluate
   [m config]
   (cond
@@ -213,25 +230,82 @@
 
     (map? m)
     (cond
+
+      ;; Contains :then
+      (contains? m :then)
+      ;; `dissoc` the :then entry and run it as if it didn't exist.
+      ;; Then, extract the new environment from the result, and run the 
+      ;; :then entry with that environment.
+      (let [patch (evaluate (dissoc m :then) config)
+            env (extract patch (:env config))]
+        (concat [patch]
+                (pmap #(evaluate % (assoc config :env env))
+                      (:then m))))
+
       ;; Functions and special forms
-      (-> m first key str (subs 1) (.startsWith "~("))
-      (let [fun (-> m first key str (subs 3) symbol)]
+      (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
+      (let [fun-entry (->> m (filter #(-> % key str (subs 1) (.startsWith "~("))) first)
+            fun (-> fun-entry key str (subs 3) symbol)]
         (condp = fun
+          ;; Special forms
           'if
-          (eval (conj (evaluate (-> m first val) config) fun))
+          (eval (conj (evaluate (-> fun-entry val) config) fun))
+
+          'fn
+          (fn [& argv]
+            (let [args (-> fun-entry val first) ;; list of strings
+                  statements (->> fun-entry val (drop 1))
+                  env (loop [args args
+                             argv argv
+                             env (:env config)]
+                        (if (empty? args)
+                          env
+                          (let [env (merge env
+                                           {(evaluate (keyword (first args)) config)
+                                            (evaluate (first argv) config)})]
+                            (recur (drop 1 args)
+                                   (drop 1 argv)
+                                   env))))]
+              (loop [statements statements last-ret nil]
+                (if (empty? statements)
+                  last-ret
+                  (let [ret (evaluate (first statements) (assoc config :env env))]
+                    (recur (drop 1 statements) ret)))))) 
+
+          (symbol "#")
+          (fn [& argv]
+            (let [env (merge (:env config)
+                             (into {}
+                               (map-indexed
+                                 (fn [idx item] [(keyword (str idx)) (evaluate item config)])
+                                 argv)))]
+              (loop [statements (-> fun-entry val) last-ret nil]
+                (if (empty? statements)
+                  last-ret
+                  (let [ret (evaluate (first statements) (assoc config :env env))]
+                    (recur (drop 1 statements) ret))))))
+
           'for
-          (let [coll (-> m first val first second (evaluate config))]
-            (for [x coll]
-              (let [env (merge (:env config) {(keyword (-> m first val ffirst (evaluate config))) x})]
-                (evaluate (-> m first val second) (assoc config :env env)))))
+          (let [coll (-> fun-entry val first second (evaluate config))]
+            (doall
+              (map
+                #(let [env (merge (:env config) {(keyword (-> fun-entry val ffirst (evaluate config))) %})]
+                  (evaluate (->> fun-entry val (drop 1)) (assoc config :env env)))
+                coll)))
+              
           ;; Functions
           (apply (resolve fun) (evaluate (-> m first val) config))))
+          
 
       ;; Modules
       (contains? m :module)
       (let [config (assoc config :env (merge (:env config)
                                              (evaluate (:in m) config)))
-            module (resolve-module (:data-connector config) (evaluate (:module m) config))
+            module (if (string? (:module m))
+                     (resolve-module
+                       (:data-connector config)
+                       (evaluate (:module m) config))
+                     (:module m))
             ;; Run the module. Each module returns a report with a new env
             ;; based on what it requires/provides, and a list of return values
             ;; for each checkpoint.
@@ -239,19 +313,10 @@
             ;; The new env is made up of the old env, with any keys being
             ;; overridden by the :out keys in the patch. All the others are
             ;; ignored.
-            env (merge (:env config) (evaluate (:out m)
-                                               (assoc config :env (merge (:env config)
-                                                                         (:env report)))))
-            ;; Flat list of reports from the tree of patches.
-            reports (conj
-                      (flatten
-                        (do-groups evaluate
-                          (:then m)
-                          (if (map? (:then m))
-                            (assoc-flags (assoc config :env env) (:then m))
-                            (assoc config :env env))))
-                      report)]
-        (assoc m :reports reports))
+            out (evaluate (:out m)
+                          (assoc config :env (merge (:env config)
+                                                    (:env report))))]
+        (assoc m :report report))
 
       ;; All other maps
       :else
@@ -269,20 +334,17 @@
 
 (defn run-program
   [config]
-  ;; A program's main is a collection of one or more entry points
-  ;; that are all kicked off in parallel.
+  ;; A program's main is a collection of one or more entry point groups
+  ;; that are kicked off concurrently.
   (let [program (try
                   (resolve-program (:data-connector config) (:program config))
                   (catch Exception e
                     (die
                       "The configuration must have a program property, which must be a path to a valid yaml document:"
-                      (.getMessage e))))]
-
+                      (.getMessage e))))
+        config (assoc config :env (evaluate (:env config) config))]
     (when-let [main (:main program)]
-      (doall
-        (pmap
-          #(evaluate % config)
-           main)))))
+      (pmap #(evaluate % config) main))))
 
 
 (defn -main
@@ -299,6 +361,8 @@
                          (format "The first argument must be a path to a valid yaml document: %s\n%s"
                            (.getMessage e)
                            help))))]
+        ;; Google "clojure stencil" (for the stencil library) for help finding
+        ;; what these options can be. It's not easy.
         (swap! parser-options #(merge % (or (:parser-options config) {})))
         (try
           ;; dynamically require the namespace containing the data-connector
@@ -311,27 +375,25 @@
               (let [effective (java.util.Date.
                                 (or (:effective config)
                                     (-> (java.util.Date.) .getTime)))
-                    return (run-program (assoc config :env (evaluate (:env config) config)
-                                                      ;; This timestamp is also intended to be used (via .getTime)
+                    return (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
                                                       ;; as a seed for any pseudorandom number generation, so that
                                                       ;; randomized testing can be retested as deterministically
                                                       ;; as possible.
                                                       :effective effective
                                                       ;; Instantiate a node manager with an empty node map as an atom.
                                                       :node-manager (NodeManager. (atom {}) effective 0 logger)
-                                                      ;; Again, the data connector is for resolving a string
-                                                      ;; representation of particular resources. In the future,
+                                                      ;; The data connector is for resolving literal
+                                                      ;; representations of particular resources. In the future,
                                                       ;; database persistence should be supported, with
                                                       ;; continued support for file based configuration, too.
                                                       :data-connector (dc-ctor)))]
-                (let [x (->> return first)]
-                  (spit "foo.json" (json/generate-string return)))
+                (spit "test.json" (json/generate-string return))
                 ;; Allow time for agents to finish logging.
                 (Thread/sleep 1000)
                 ;; Kill the agents so the program exits without delay.
                 (shutdown-agents)
                 ;; `return` is a list (the main group) of lists of modules
-                (System/exit (count (remove #(or (nil? %)
+                (System/exit 0 #_(count (remove #(or (nil? %)
                                                  (zero? %))
                                             (mapcat (fn [entry]
                                                       (mapcat (fn [module]

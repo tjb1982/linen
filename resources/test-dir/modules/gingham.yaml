@@ -6,8 +6,8 @@ requires:
     - key: BASE
       description: >
         The API base relative to where the gingham endpoint functions point.
-        - key: NODE_NAME
-        - key: NODE_USER
+    - key: NODE_NAME
+    - key: NODE_USER
 description: >
     General API test module.
 checkpoints:
@@ -35,5 +35,9 @@ checkpoints:
                         git clone git@github.com:tjb1982/gingham.git
                     fi
 
-                    gingham/gingham.py ~{TEST} -b ~{BASE}
+                    gingham/gingham.py ~{TEST} \
+                        -b ~{BASE} \
+                    ~{#KWARGS}
+                        -a ~{key}="~{val}" \
+                    ~{/KWARGS} -- ~{#ARGV}~{val} ~{/ARGV}
 

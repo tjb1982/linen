@@ -3,55 +3,66 @@ main:
     - module: ~{TEST_DIR}/modules/node-init.yaml
       in:
         NODE_NAME: ~@SPOCK_NODE_NAME
-        IP_INVOCATION:
-            ~(if:
-                - ~@PRIVATE_IP
-                - hostname -I
-                - dig +short myip.opendns.com @resolver1.opendns.com
       out:
         SPOCK_HOSTNAME: ~@IP_ADDRESS
-
       then:
-        - - module: ~{TEST_DIR}/modules/spock-init.yaml
-            in:
-            then:
-              - - module: ~{TEST_DIR}/modules/spock-smoketest.yaml
+        - module: ~{TEST_DIR}/modules/spock-init.yaml
+          in:
+          then:
+            - module: ~{TEST_DIR}/modules/spock-smoketest.yaml
+              then:
+                - ~(map:
+                    - ~(#:
+                        - module: ~{TEST_DIR}/modules/gingham.yaml
+                          isolate: true
+                          in:
+                            TEST: ~@0
+                            BASE: http://~{SPOCK_HOSTNAME}:8889/api/v1
+                            NODE_NAME: ~@SPOCK_NODE_NAME
+                            NODE_USER: ~@SPOCK_USER
+                    - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
+                - ~(pmap:
+                    - ~(#:
+                        - module: ~{TEST_DIR}/modules/node-init.yaml
+                          in:
+                            NODE_NAME: t~{0}
+                            FORCE: true
+                          out:
+                            TARGET_PRIVATE_KEYS:
+                                ~(conj:
+                                    - ~@TARGET_PRIVATE_KEYS
+                                    - ~@SSH_PRIVATE_KEY
+                            TARGETS_SSH:
+                                ~(conj:
+                                    - ~@TARGETS_SSH
+                                    - ~(str:
+                                        - ~(clojure.string/trim:
+                                            - ~@IP_ADDRESS
+                                        - ":22"
+                    - ~(range:
+                        - 0
+                        - ~@TARGET_NODE_COUNT
                   then:
-                    - - ~(for:
-                          - - test
-                            - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
-                          - module: ~{TEST_DIR}/modules/gingham.yaml
-                            isolate: true
-                            in:
-                              TEST: ~@test
-                              BASE: http://~{SPOCK_HOSTNAME}:8889/api/v1
-                              NODE_NAME: ~@SPOCK_NODE_NAME
-                              NODE_USER: ~@SPOCK_USER
+                    - module: ~{TEST_DIR}/modules/gingham.yaml
+                      in:
+                        TEST: ~{OPSC_HOME}/spock/test/functional/api-tests/demo-path.yaml
+                        BASE: http://~{SPOCK_HOSTNAME}:8889/api/v1
+                        NODE_NAME: ~@SPOCK_NODE_NAME
+                        NODE_USER: ~@SPOCK_USER
+                        KWARGS:
+                            - key: NODES
+                              val:
+                                ~(clojure.string/join:
+                                    - ","
+                                    - ~@TARGETS_SSH
+                            - key: USERNAME
+                              val: ~@SPOCK_USER
+                            - key: PRIVATE_KEY
+                              val:
+                                ~(first:
+                                    - ~@TARGET_PRIVATE_KEYS
+                            - key: RETRY
+                              val: 250
+                            - key: DELAY
+                              val: 100
 
-#                              then:
-#                                - ~(for:
-#                                    - - test
-#                                      - - ~{OPSC_HOME}/spock/test/functional/api-tests/repository-credentials-test.yaml
-#                                    - module: ~{TEST_DIR}/modules/gingham.yaml
-#                                      isolate: true
-#                                      in:
-#                                        TEST: ~@test
-#                                        BASE: http://~{SPOCK_IP}:8889/api/v1
-#                                - ~(for:
-#                                    - - idx
-#                                      - ~(range:
-#                                          - 0
-#                                          - ~@TARGET_NODE_COUNT
-#                                    - module: ~{TEST_DIR}/modules/node-init.yaml
-#                                      in:
-#                                        NODE_NAME: t~{idx}
-#                                      out:
-#                                        TARGET_NODES:
-#                                            ~(conj:
-#                                                - ~@TARGET_NODES
-#                                                - ~@NODE_NAME
-#                        - group:
-#                            - module: ~{TEST_DIR}/modules/spock-provision.yaml
-#                              in:
-#                                TARGET_SSH_PORT: 22
-#            
