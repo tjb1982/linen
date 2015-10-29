@@ -12,3 +12,6 @@ pom.xml.asc
 *.swp
 *.swo
 *.swn
+node_modules
+notes.txt
+notes.md
