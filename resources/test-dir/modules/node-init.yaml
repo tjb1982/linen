@@ -5,8 +5,8 @@ requires:
     - key: NODE_NAME
     - key: NODE_CONNECTOR
     - key: NODE_CONFIG
-    - key: IP_INVOCATION
-      default: dig +short myip.opendns.com @resolver1.opendns.com
+    - key: PRIVATE_IP
+      default: true
     - key: FORCE
       default: false
 provides:
@@ -32,7 +32,11 @@ checkpoints:
             - nodes:
                 - name: ~@NODE_NAME
                   out: IP_ADDRESS
-              invocation: ~@IP_INVOCATION
+              invocation:
+                ~(if:
+                    - ~@PRIVATE_IP
+                    - hostname -I
+                    - dig +short myip.opendns.com @resolver1.opendns.com
             - nodes:
                 - name: ~@NODE_NAME
               throw: false
