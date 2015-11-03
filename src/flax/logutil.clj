@@ -1,6 +1,7 @@
 (ns flax.logutil
   (:require [clojure.core.async :refer [go-loop chan <! >!!]]
             [flax.protocols :refer [PLogger]]
+            [clojure.tools.logging :as clog]
             [me.raynes.conch.low-level :as sh]))
 
 
@@ -56,4 +57,11 @@
     (cond
       (string? msg) (log* msg)
       (sequential? msg) (doall (map log* msg)))))
+
+(deftype ClojureToolsLogger []
+  PLogger
+  (log [self level msg]
+    (when
+      (string? msg)
+      (clog/log level msg))))
 

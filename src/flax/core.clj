@@ -1,28 +1,29 @@
-(ns flax.main
+(ns flax.core
   (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [clj-yaml.core :as yaml]
             [cheshire.core :as json]
             [clojure.pprint :refer [pprint]]
             [flax.logutil :refer :all]
             [flax.protocols :refer :all]
-            [flax.node-manager]
+            [flax.node-manager :refer :all]
             [stencil.parser :refer [parse]]
             [stencil.core :refer [render]]
             )
   (:import flax.node_manager.NodeManager
            flax.node_manager.LocalConnector
-           flax.logutil.StandardLogger)
+           flax.logutil.StandardLogger
+           flax.logutil.ClojureToolsLogger)
   (:gen-class))
 
 
 (def parser-options (atom {:tag-open "~{" :tag-close "}"}))
 (def help
   (str "usage: flax path/to/properties.yaml"))
-(def genv (atom {}) #_(atom
+(def genv (atom
             (into {}
               (for [[k v] (System/getenv)]
                 [(keyword k) v]))))
-(def logger (StandardLogger.))
+(def logger (ClojureToolsLogger.))
 
 
 (defn bool?
@@ -34,13 +35,6 @@
   [& args]
   (apply println args)
   (System/exit 1))
-
-
-(defn node-list
-  [nodes]
-  (if (instance? Integer nodes)
-    (str nodes)
-    (name nodes)))
 
 
 (defn swap
@@ -120,7 +114,7 @@
           (:nodes checkpoint)))
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
-      (list (-> (LocalConnector.) (invoke checkpoint))))
+      (list (-> local-connector (invoke checkpoint))))
     ))
 
 
@@ -347,65 +341,53 @@
       (pmap #(evaluate % config) main))))
 
 
-(defn -main
-  [& argv]
-  (if (= (first argv) "help")
-    ;; the system will exit(0) by default
-    (println help)
-    (if (empty? argv)
-      ;; sorry, we need the config to proceed
-      (die help)
-      (let [config (try (-> (first argv) slurp yaml/parse-string)
-                     (catch Exception e
-                       (die
-                         (format "The first argument must be a path to a valid yaml document: %s\n%s"
-                           (.getMessage e)
-                           help))))]
-        ;; Google "clojure stencil" (for the stencil library) for help finding
-        ;; what these options can be. It's not easy.
-        (swap! parser-options #(merge % (or (:parser-options config) {})))
-        (try
-          ;; dynamically require the namespace containing the data-connector
-          (require (symbol (:data-connector config)))
+(defn run
+  [config]
+  ;; Google "clojure stencil" (for the stencil library) for help finding
+  ;; what these options can be. It's not particularly easy. -- tjb
+  (swap! parser-options #(merge % (or (:parser-options config) {})))
+  (try
+    ;; dynamically require the namespace containing the data-connector
+    (require (symbol (:data-connector config)))
 
-          (let [dc-ctor (-> config :data-connector (str "/connector") symbol resolve)]
-            (if-not dc-ctor
-              ;; we can't proceed without any way of resolving the location of the program
-              (die (format "Constructor for data connector `%s` not found" (-> config :data-connector)))
-              (let [effective (java.util.Date.
-                                (or (:effective config)
-                                    (-> (java.util.Date.) .getTime)))
-                    return (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
-                                                      ;; as a seed for any pseudorandom number generation, so that
-                                                      ;; randomized testing can be retested as deterministically
-                                                      ;; as possible.
-                                                      :effective effective
-                                                      ;; Instantiate a node manager with an empty node map as an atom.
-                                                      :node-manager (NodeManager. (atom {}) effective 0 logger)
-                                                      ;; The data connector is for resolving literal
-                                                      ;; representations of particular resources. In the future,
-                                                      ;; database persistence should be supported, with
-                                                      ;; continued support for file based configuration, too.
-                                                      :data-connector (dc-ctor)))]
-                (spit "test.json" (json/generate-string return))
-                ;; Allow time for agents to finish logging.
-                (Thread/sleep 1000)
-                ;; Kill the agents so the program exits without delay.
-                (shutdown-agents)
-                ;; `return` is a list (the main group) of lists of modules
-                (System/exit 0 #_(count (remove #(or (nil? %)
-                                                 (zero? %))
-                                            (mapcat (fn [entry]
-                                                      (mapcat (fn [module]
-                                                                (mapcat (fn [ret]
-                                                                          (map (fn [node]
-                                                                                 (:exit node))
-                                                                               ret))
-                                                                        (:returns module)))
-                                                              entry))
-                                                    return))))
-                )))
-          (catch java.io.FileNotFoundException fnfe
-            (die "Resource could not be found:" (.getMessage fnfe)))
-          )))))
+    (let [dc-ctor (-> config :data-connector (str "/connector") symbol resolve)]
+      (if-not dc-ctor
+        ;; we can't proceed without any way of resolving the location of the program
+        (die (format "Constructor for data connector `%s` not found" (-> config :data-connector)))
+        (let [effective (java.util.Date.
+                          (or (:effective config)
+                              (-> (java.util.Date.) .getTime)))
+              return (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
+                                                ;; as a seed for any pseudorandom number generation, so that
+                                                ;; randomized testing can be retested as deterministically
+                                                ;; as possible.
+                                                :effective effective
+                                                ;; Instantiate a node manager with an empty node map as an atom.
+                                                :node-manager (node-manager effective 0 logger)
+                                                ;; The data connector is for resolving literal
+                                                ;; representations of particular resources. In the future,
+                                                ;; database persistence should be supported, with
+                                                ;; continued support for file based configuration, too.
+                                                :data-connector (dc-ctor)))]
+          (spit "test.json" (json/generate-string return))
+          ;; Allow time for agents to finish logging.
+          (Thread/sleep 1000)
+          ;; Kill the agents so the program exits without delay.
+          (shutdown-agents)
+          ;; `return` is a list (the main group) of lists of modules
+          (System/exit 0 #_(count (remove #(or (nil? %)
+                                           (zero? %))
+                                      (mapcat (fn [entry]
+                                                (mapcat (fn [module]
+                                                          (mapcat (fn [ret]
+                                                                    (map (fn [node]
+                                                                           (:exit node))
+                                                                         ret))
+                                                                  (:returns module)))
+                                                        entry))
+                                              return))))
+          )))
+    (catch java.io.FileNotFoundException fnfe
+      (die "Resource could not be found:" (.getMessage fnfe)))
+    ))
 

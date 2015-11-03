@@ -21,13 +21,13 @@ checkpoints:
                   connector: ~@NODE_CONNECTOR
                   options: ~@NODE_CONFIG
                   force: ~@FORCE
-        - group:
-            - nodes:
-                - name: ~@NODE_NAME
-              invocation: mkdir -p ~/.ssh
-            - nodes:
-                - name: ~@NODE_NAME
-              invocation: apt-get -y install dnsutils
+#        - group:
+#            - nodes:
+#                - name: ~@NODE_NAME
+#              invocation: mkdir -p ~/.ssh
+#            - nodes:
+#                - name: ~@NODE_NAME
+#              invocation: apt-get -y install dnsutils
         - group:
             - nodes:
                 - name: ~@NODE_NAME
@@ -37,14 +37,14 @@ checkpoints:
                     - ~@PRIVATE_IP
                     - hostname -I
                     - dig +short myip.opendns.com @resolver1.opendns.com
-            - nodes:
-                - name: ~@NODE_NAME
-              throw: false
-              invocation: echo -e "\n\n\n" | ssh-keygen -t rsa -N "" -f ~/.ssh/flax_id_rsa
-        - group:
-            - nodes:
-                - name: ~@NODE_NAME
-                  out: SSH_PRIVATE_KEY
-              invocation: cat ~/.ssh/flax_id_rsa
-              log: false
+#            - nodes:
+#                - name: ~@NODE_NAME
+#              throw: false
+#              invocation: echo -e "\n\n\n" | ssh-keygen -t rsa -N "" -f ~/.ssh/flax_id_rsa
+#        - group:
+#            - nodes:
+#                - name: ~@NODE_NAME
+#                  out: SSH_PRIVATE_KEY
+#              invocation: cat ~/.ssh/flax_id_rsa
+#              log: false
 

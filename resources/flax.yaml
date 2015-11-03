@@ -6,7 +6,7 @@ dry-run: true
 log-script: true
 env:
     SPOCK_NODE_NAME: spock
-    OPSC_HOME: ~/ripcord
+    OPSC_HOME: ~{HOME}/ripcord
     OPSC_BRANCH_NAME: yar-2-compat
     SPOCK_USER: ubuntu
     FORCE: false
@@ -19,4 +19,6 @@ env:
     TEST_DIR: ~/flax/resources/test-dir
     GITHUB_PRIVATE_KEY: ~$ cat ~/.ssh/id_rsa
     TARGET_NODE_COUNT: 3
+    API_TESTS:
+        - ~{HOME}/ripcord/spock/test/functional/api-tests/repository-credentials-test.yaml
 

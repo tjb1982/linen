@@ -1,5 +1,6 @@
 (ns flax.node-manager
-  (:require [flax.protocols :refer :all])
+  (:require [flax.protocols :refer :all]
+            [flax.logutil :refer :all])
   (:gen-class))
 
 
@@ -9,17 +10,51 @@
   (-> namesp (str "/connector") symbol resolve))
 
 
-(defrecord LocalConnector []
+(defrecord LocalConnector [logger]
   PNodeConnector
   (create [self node full-name] self)
   (destroy [self] nil)
   (invoke [self checkpoint]
-    (-> checkpoint :invocation))
+    (if-not (:invocation checkpoint)
+      checkpoint
+      (let [argv (remove nil?
+                   (flatten
+                     ["sudo" (if-let [u (:user checkpoint)] ["-u" u]) "bash" "-c" (or (:invocation checkpoint) "")]))
+            proc (-> (Runtime/getRuntime)
+                   (.exec (into-array String argv)))
+            stdout (stream-to-reader (.getInputStream proc))
+            stderr (stream-to-reader (.getErrorStream proc))]
+        (when-not (false? (:log checkpoint))
+          (log logger :debug (clojure.string/join " " argv)))
+        (loop [out []
+               err []]
+          (let [line (.readLine stdout)
+                errl (.readLine stderr)]
+            (when-not (false? (:log checkpoint))
+              (when-not (clojure.string/blank? line)
+                (log logger :info line))
+              (when-not (clojure.string/blank? errl)
+                (log logger :info errl)))
+            (if-not (and (nil? line)
+                         (nil? errl))
+              (recur (if-not (nil? line)
+                       (conj out line) out)
+                     (if-not (nil? errl)
+                       (conj err errl) err))
+              (let [out (clojure.string/join "\n" out)
+                    err (clojure.string/join "\n" err)]
+                (assoc checkpoint :out {:keys (:out checkpoint)
+                                        :value out}
+                                  :err {:keys (:err checkpoint)
+                                        :value err}
+                                  :exit (when (:throw checkpoint)
+                                          (.waitFor proc))))))))))
+
   (clone [self]
     self))
 
 
-(def local-connector (LocalConnector.))
+(def ^:dynamic local-connector nil)
 
 
 (defrecord NodeManager [nodes effective version logger]
@@ -28,7 +63,7 @@
     (cond
       ;; In the case where you want to run the checkpoint on foreign nodes
       ;; and the local node.
-      (= node "local") local-connector
+      (= (-> node :name) "local") local-connector
       ;; If you're only passing a string, the only outcome can be
       ;; retrieving an existing node (or nil).
       (string? node) (-> @nodes (get (full-node-name self node)))
@@ -55,3 +90,8 @@
   (isolate [self]
     self))
 
+(defn node-manager
+  [effective version logger]
+  (alter-var-root #'local-connector
+                  (fn [_] (LocalConnector. logger)))
+  (NodeManager. (atom {}) effective version logger))
