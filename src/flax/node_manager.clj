@@ -19,22 +19,22 @@
       checkpoint
       (let [argv (remove nil?
                    (flatten
-                     ["sudo" (if-let [u (:user checkpoint)] ["-u" u]) "bash" "-c" (or (:invocation checkpoint) "")]))
+                     [(if-let [u (:user checkpoint)] ["sudo" "-u" u]) "bash" "-c" (:invocation checkpoint)]))
             proc (-> (Runtime/getRuntime)
                    (.exec (into-array String argv)))
             stdout (stream-to-reader (.getInputStream proc))
             stderr (stream-to-reader (.getErrorStream proc))]
         (when-not (false? (:log checkpoint))
-          (log logger :debug (clojure.string/join " " argv)))
+          (log logger :info (clojure.string/join " " argv)))
         (loop [out []
                err []]
           (let [line (.readLine stdout)
                 errl (.readLine stderr)]
             (when-not (false? (:log checkpoint))
               (when-not (clojure.string/blank? line)
-                (log logger :info line))
+                (log logger :debug line))
               (when-not (clojure.string/blank? errl)
-                (log logger :info errl)))
+                (log logger :debug errl)))
             (if-not (and (nil? line)
                          (nil? errl))
               (recur (if-not (nil? line)
