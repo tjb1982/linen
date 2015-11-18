@@ -17,38 +17,44 @@
   (invoke [self checkpoint]
     (if-not (:invocation checkpoint)
       checkpoint
-      (let [argv (remove nil?
+      (let [tmpfile-name (str ".flax-temp-script-" (java.util.UUID/randomUUID))
+            argv (remove nil?
                    (flatten
-                     [(if-let [u (:user checkpoint)] ["sudo" "-u" u]) "bash" "-c" (:invocation checkpoint)]))
-            proc (-> (Runtime/getRuntime)
-                   (.exec (into-array String argv)))
-            stdout (stream-to-reader (.getInputStream proc))
-            stderr (stream-to-reader (.getErrorStream proc))]
-        (when-not (false? (:log checkpoint))
-          (log logger :info (clojure.string/join " " argv)))
-        (loop [out []
-               err []]
-          (let [line (.readLine stdout)
-                errl (.readLine stderr)]
-            (when-not (false? (:log checkpoint))
-              (when-not (clojure.string/blank? line)
-                (log logger :debug line))
-              (when-not (clojure.string/blank? errl)
-                (log logger :debug errl)))
-            (if-not (and (nil? line)
-                         (nil? errl))
-              (recur (if-not (nil? line)
-                       (conj out line) out)
-                     (if-not (nil? errl)
-                       (conj err errl) err))
-              (let [out (clojure.string/join "\n" out)
-                    err (clojure.string/join "\n" err)]
-                (assoc checkpoint :out {:keys (:out checkpoint)
-                                        :value out}
-                                  :err {:keys (:err checkpoint)
-                                        :value err}
-                                  :exit (when (:throw checkpoint)
-                                          (.waitFor proc))))))))))
+                     [(if-let [u (:user checkpoint)] ["sudo" "-u" u]) "bash" tmpfile-name]))]
+        (spit tmpfile-name (:invocation checkpoint))
+        (let [proc (-> (Runtime/getRuntime)
+                     (.exec (into-array String argv)))
+              stdout (stream-to-reader (.getInputStream proc))
+              stderr (stream-to-reader (.getErrorStream proc))]
+          (future
+            (Thread/sleep 5000)
+            (clojure.java.io/delete-file tmpfile-name))
+          (when-not (false? (:log checkpoint))
+            (log logger :info (clojure.string/join " " argv))
+            (log logger :info (str "Contents of " tmpfile-name ":\n" (:invocation checkpoint))))
+          (loop [out []
+                 err []]
+            (let [line (.readLine stdout)
+                  errl (.readLine stderr)]
+              (when-not (false? (:log checkpoint))
+                (when-not (clojure.string/blank? line)
+                  (log logger :debug line))
+                (when-not (clojure.string/blank? errl)
+                  (log logger :debug errl)))
+              (if-not (and (nil? line)
+                           (nil? errl))
+                (recur (if-not (nil? line)
+                         (conj out line) out)
+                       (if-not (nil? errl)
+                         (conj err errl) err))
+                (let [out (clojure.string/join "\n" out)
+                      err (clojure.string/join "\n" err)]
+                  (assoc checkpoint :out {:keys (:out checkpoint)
+                                          :value out}
+                                    :err {:keys (:err checkpoint)
+                                          :value err}
+                                    :exit (when (:throw checkpoint)
+                                            (.waitFor proc)))))))))))
 
   (clone [self]
     self))
