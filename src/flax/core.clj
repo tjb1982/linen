@@ -110,6 +110,8 @@
                                             (:out %)]
                                       :err [(:err checkpoint)
                                             (:err %)]
+                                      :exit [(:exit checkpoint)
+                                             (:exit %)]
                                       :user (:user %))))
           (:nodes checkpoint)))
       ;; Run it on the local host, returning a list as if it were run on
@@ -169,8 +171,10 @@
                             (reduce (fn [env checkpoint]
                                       (let [out-arr (-> checkpoint :out :keys first keyword)
                                             err-arr (-> checkpoint :err :keys first keyword)
+                                            exit-arr (-> checkpoint :exit :keys first keyword)
                                             out (-> checkpoint :out :value)
-                                            err (-> checkpoint :err :value)]
+                                            err (-> checkpoint :err :value)
+                                            exit (-> checkpoint :exit :value)]
                                         (reduce (fn [env [k v]]
                                                   (if-not (nil? k)
                                                     (assoc env k v) env))
@@ -178,7 +182,9 @@
                                                 [[out-arr (conj (get env out-arr) out)]
                                                  [(-> checkpoint :out :keys second keyword) out]
                                                  [err-arr (conj (get env err-arr) err)]
-                                                 [(-> checkpoint :err :keys second keyword) err]])))
+                                                 [(-> checkpoint :err :keys second keyword) err]
+                                                 [exit-arr (conj (get env exit-arr) exit)]
+                                                 [(-> checkpoint :exit :keys second keyword) exit]])))
                                     env
                                     return)))
                         {}
@@ -186,7 +192,7 @@
           )))))
 
 
-(defn extract
+(defn extract-env
   [m & [env]]
   (cond
 
@@ -198,16 +204,76 @@
         (merge env out))
       (reduce
         (fn [env [k v]]
-          (merge env (extract v env)))
+          (merge env (extract-env v env)))
         env m))
 
     (coll? m)
     (reduce
       (fn [env x]
-        (extract x env))
+        (extract-env x env))
       env m)
 
     :else env))
+
+
+(defn harvest
+  [m config hkey & [reports]]
+  (cond
+    (map? m)
+    (if-let [report ((keyword hkey) m)]
+      (conj reports report)
+      (reduce
+        (fn [reports [k v]]
+          (harvest v config hkey reports))
+        reports m))
+
+    (coll? m)
+    (reduce
+      (fn [reports x]
+        (harvest x config hkey reports))
+      reports m)
+
+    :else reports))
+
+
+(defn returns
+  [m & [rets]]
+  (cond
+    (map? m)
+    (if-let [r (-> m :returns)]
+      (concat rets r)
+      (reduce
+        (fn [rets [k v]]
+          (returns v rets))
+        rets m))
+
+    (coll? m)
+    (reduce
+      (fn [rets x]
+        (returns x rets))
+      rets m)
+
+    :else rets))
+
+
+(defn exits
+  [m & [es]]
+  (cond
+    (map? m)
+    (if-let [e (-> m :exit :value)]
+      (conj es e)
+      (reduce
+        (fn [es [k v]]
+          (exits v es))
+        es m))
+
+    (coll? m)
+    (reduce
+      (fn [es x]
+        (exits x es))
+      es m)
+
+    :else es))
 
 
 (defn evaluate
@@ -231,10 +297,10 @@
       ;; Then, extract the new environment from the result, and run the 
       ;; :then entry with that environment.
       (let [patch (evaluate (dissoc m :then) config)
-            env (extract patch (:env config))]
+            env (extract-env patch (:env config))]
         (concat [patch]
-                (pmap #(evaluate % (assoc config :env env))
-                      (:then m))))
+                (doall (pmap #(evaluate % (assoc config :env env))
+                             (:then m)))))
 
       ;; Functions and special forms
       (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
@@ -288,8 +354,11 @@
                 coll)))
               
           ;; Functions
-          (apply (resolve fun) (evaluate (-> m first val) config))))
-          
+          (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
+            (if (coll? yield)
+              (doall yield)
+              yield))))
+
 
       ;; Modules
       (contains? m :module)
@@ -321,7 +390,7 @@
 
     ;; Other collections
     (coll? m)
-    (reverse (into (empty m) (map (fn [item] (evaluate item config)) m)))
+    (reverse (into (empty m) (doall (map (fn [item] (evaluate item config)) m))))
     
     :else m))
 
@@ -369,23 +438,37 @@
                                                 ;; database persistence should be supported, with
                                                 ;; continued support for file based configuration, too.
                                                 :data-connector (dc-ctor)))]
-          (spit "test.json" (json/generate-string return))
+          (spit "target/logs/raw.json" (json/generate-string return))
           ;; Allow time for agents to finish logging.
           (Thread/sleep 1000)
           ;; Kill the agents so the program exits without delay.
           (shutdown-agents)
-          ;; `return` is a list (the main group) of lists of modules
-          (System/exit 0 #_(count (remove #(or (nil? %)
-                                           (zero? %))
-                                      (mapcat (fn [entry]
-                                                (mapcat (fn [module]
-                                                          (mapcat (fn [ret]
-                                                                    (map (fn [node]
-                                                                           (:exit node))
-                                                                         ret))
-                                                                  (:returns module)))
-                                                        entry))
-                                              return))))
+
+          (spit "target/harvest.json"
+                (json/generate-string
+                  (reduce
+                    (fn [harvested rset]
+                      (merge harvested rset))
+                    {}
+                    (map (fn [hkey]
+                           {(keyword hkey) (harvest return config hkey [])})
+                         (-> config :harvest)))))
+
+
+          ;; `return` is a fully evaluated data structure based on the data
+          ;; structure of the program.
+          (let [big-exit (let [returns (returns return)
+                               exits (exits returns)]
+                           (spit "target/failures.json"
+                             (json/generate-string returns))
+;;                               (filter #(-> % :exit :value zero? not)
+;;                                       (remove #(-> % :exit :value nil?) returns))))
+                           (if (->> exits (remove nil?) (every? zero?))
+                             0
+                             (count (->> exits (remove zero?) (remove nil?)))))]
+            (println "The big exit:" big-exit)
+            (System/exit big-exit)
+            )
           )))
     (catch java.io.FileNotFoundException fnfe
       (die "Resource could not be found:" (.getMessage fnfe)))
