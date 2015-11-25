@@ -26,9 +26,6 @@
                      (.exec (into-array String argv)))
               stdout (stream-to-reader (.getInputStream proc))
               stderr (stream-to-reader (.getErrorStream proc))]
-          (future
-            (Thread/sleep 5000)
-            (clojure.java.io/delete-file tmpfile-name))
           (when-not (false? (:log checkpoint))
             (log logger :info (clojure.string/join " " argv))
             (log logger :info (str "Contents of " tmpfile-name ":\n" (:invocation checkpoint))))
@@ -38,9 +35,9 @@
                   errl (.readLine stderr)]
               (when-not (false? (:log checkpoint))
                 (when-not (clojure.string/blank? line)
-                  (log logger :debug line))
+                  (log logger :info line))
                 (when-not (clojure.string/blank? errl)
-                  (log logger :debug errl)))
+                  (log logger :info errl)))
               (if-not (and (nil? line)
                            (nil? errl))
                 (recur (if-not (nil? line)
@@ -49,13 +46,13 @@
                          (conj err errl) err))
                 (let [out (clojure.string/join "\n" out)
                       err (clojure.string/join "\n" err)]
+                  (clojure.java.io/delete-file tmpfile-name)
                   (assoc checkpoint :out {:keys (:out checkpoint)
                                           :value out}
                                     :err {:keys (:err checkpoint)
                                           :value err}
-                                    :exit (when (:throw checkpoint)
-                                            (.waitFor proc)))))))))))
-
+                                    :exit {:keys (:exit checkpoint)
+                                           :value (.waitFor proc)})))))))))
   (clone [self]
     self))
 
