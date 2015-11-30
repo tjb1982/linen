@@ -41,11 +41,16 @@
   [s env]
   (let [env (merge @genv env)]
     (cond
+      ;; Env dump.
+      (= (clojure.string/trim s) "~@")
+      env
+
       ;; If `s` starts with ~@, then replace it with the data held by the
       ;; variable (i.e., not a string interpolation of it).
       (.startsWith s "~@")
       (let [data (-> s (subs 2) keyword env)]
         (if (string? data) (clojure.string/trim data) data))
+
       ;; If `s` starts with "~$", then replace it with the
       ;; stdout result of running the script locally.
       (.startsWith s "~$")
@@ -60,6 +65,7 @@
               (if (nil? line)
                 lines
                 (recur (conj lines line)))))))
+
       ;; Interpolate.
       :else (render
               (parse s @parser-options)
@@ -241,7 +247,9 @@
   (cond
     (map? m)
     (if-let [r (-> m :returns)]
-      (concat rets r)
+      (reduce
+        #(concat %1 %2)
+        rets r)
       (reduce
         (fn [rets [k v]]
           (returns v rets))
@@ -438,13 +446,17 @@
                                                 ;; database persistence should be supported, with
                                                 ;; continued support for file based configuration, too.
                                                 :data-connector (dc-ctor)))]
-          (spit "target/logs/raw.json" (json/generate-string return))
-          ;; Allow time for agents to finish logging.
-          (Thread/sleep 1000)
-          ;; Kill the agents so the program exits without delay.
-          (shutdown-agents)
 
-          (spit "target/harvest.json"
+          ;; `return` is a fully evaluated data structure based on the data
+          ;; structure of the program.
+
+          ;; Write the raw return value of the entire program to the
+          ;; logs directory.
+          (spit "target/logs/raw.json" (json/generate-string return))
+
+          (spit "target/logs/env.json" (json/generate-string (evaluate (:env config) config)))
+          ;; Write any harvested values to the logs directory.
+          (spit "target/logs/harvest.json"
                 (json/generate-string
                   (reduce
                     (fn [harvested rset]
@@ -454,19 +466,21 @@
                            {(keyword hkey) (harvest return config hkey [])})
                          (-> config :harvest)))))
 
+          ;; Write the failing returns to the logs directory and exit with
+          ;; the count of the failures.
+          (let [failures (->> (returns return)
+                              (remove #(-> % :exit :value nil?))
+                              (filter #(and (-> % :throw)
+                                            (-> % :exit :value zero? not))))
+                big-exit (count failures)]
+            (spit "target/logs/failures.json" (json/generate-string failures))
+            (log logger :info (str "Failures: " big-exit))
 
-          ;; `return` is a fully evaluated data structure based on the data
-          ;; structure of the program.
-          (let [big-exit (let [returns (returns return)
-                               exits (exits returns)]
-                           (spit "target/failures.json"
-                             (json/generate-string returns))
-;;                               (filter #(-> % :exit :value zero? not)
-;;                                       (remove #(-> % :exit :value nil?) returns))))
-                           (if (->> exits (remove nil?) (every? zero?))
-                             0
-                             (count (->> exits (remove zero?) (remove nil?)))))]
-            (println "The big exit:" big-exit)
+            ;; Allow time for agents to finish logging.
+            (Thread/sleep 1000)
+            ;; Kill the agents so the program exits without further delay.
+            (shutdown-agents)
+
             (System/exit big-exit)
             )
           )))
