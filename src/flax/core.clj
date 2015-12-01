@@ -408,7 +408,7 @@
   ;; A program's main is a collection of one or more entry point groups
   ;; that are kicked off concurrently.
   (let [program (try
-                  (resolve-program (:data-connector config) (:program config))
+                  (resolve-program (:data-connector config) (evaluate (:program config) config))
                   (catch Exception e
                     (die
                       "The configuration must have a program property, which must be a path to a valid yaml document:"
