@@ -483,7 +483,7 @@
                 num-failures (count failures)]
             (spit "target/logs/failures.json" (json/generate-string failures))
             (log logger :info (str "Failures: " num-failures))
-            (log logger :info (str "Seed: " effective))
+            (log logger :info (str "Seed: " (.getTime effective)))
 
             ;; Allow time for agents to finish logging.
             (Thread/sleep 1000)
