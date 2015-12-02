@@ -413,9 +413,17 @@
                     (die
                       "The configuration must have a program property, which must be a path to a valid yaml document:"
                       (.getMessage e))))
-        config (assoc config :env (evaluate (:env config) config))]
-    (when-let [main (:main program)]
-      (pmap #(evaluate % config) main))))
+        config (assoc config :env (evaluate (:env config) config))
+        exit (when-let [main (:main program)]
+               (doall (pmap #(evaluate % config) main)))]
+    (doall
+      (pmap
+        (fn [[k n]]
+          (when (-> @(:node n) :options :destroy-on-exit true?)
+            (destroy n)))
+        @(-> config :node-manager :nodes)))
+    exit
+    ))
 
 
 (defn run
@@ -472,17 +480,17 @@
                               (remove #(-> % :exit :value nil?))
                               (filter #(and (-> % :throw)
                                             (-> % :exit :value zero? not))))
-                big-exit (count failures)]
+                num-failures (count failures)]
             (spit "target/logs/failures.json" (json/generate-string failures))
-            (log logger :info (str "Failures: " big-exit))
+            (log logger :info (str "Failures: " num-failures))
+            (log logger :info (str "Seed: " effective))
 
             ;; Allow time for agents to finish logging.
             (Thread/sleep 1000)
             ;; Kill the agents so the program exits without further delay.
             (shutdown-agents)
 
-            (System/exit big-exit)
-            )
+            num-failures)
           )))
     (catch java.io.FileNotFoundException fnfe
       (die "Resource could not be found:" (.getMessage fnfe)))
