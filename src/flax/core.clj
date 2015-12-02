@@ -360,7 +360,15 @@
                 #(let [env (merge (:env config) {(keyword (-> fun-entry val ffirst (evaluate config))) %})]
                   (evaluate (->> fun-entry val (drop 1)) (assoc config :env env)))
                 coll)))
-              
+
+          'or
+          (loop [args (-> fun-entry val)]
+            (when-not (empty? args)
+              (let [yield (evaluate (first args) config)]
+                (if (nil? yield)
+                  (recur (drop 1 args))
+                  yield))))
+                
           ;; Functions
           (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
             (if (coll? yield)
