@@ -439,9 +439,11 @@
       (if-not dc-ctor
         ;; we can't proceed without any way of resolving the location of the program
         (die (format "Constructor for data connector `%s` not found" (-> config :data-connector)))
-        (let [effective (java.util.Date.
-                          (or (:effective config)
-                              (-> (java.util.Date.) .getTime)))
+        (let [effective (let [effective (java.util.Date.
+                                          (or (:effective config)
+                                              (-> (java.util.Date.) .getTime)))]
+                          (log logger :info (str "Seed: " (.getTime effective)))
+                          effective)
               return (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
                                                 ;; as a seed for any pseudorandom number generation, so that
                                                 ;; randomized testing can be retested as deterministically
