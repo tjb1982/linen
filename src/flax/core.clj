@@ -106,6 +106,7 @@
         ;; sure the variables are mapped to their appropriate values from the
         ;; environment.
         checkpoint (assoc-flags (evaluate checkpoint config) config)]
+    (log logger :info (:display checkpoint))
     (if (:nodes checkpoint)
       ;; Run the checkpoint on some nodes in parallel.
       (doall

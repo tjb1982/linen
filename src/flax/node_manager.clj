@@ -27,17 +27,17 @@
               stdout (stream-to-reader (.getInputStream proc))
               stderr (stream-to-reader (.getErrorStream proc))]
           (when-not (false? (:log checkpoint))
-            (log logger :info (clojure.string/join " " argv))
-            (log logger :info (str "Contents of " tmpfile-name ":\n" (:invocation checkpoint))))
+            (log logger :debug (clojure.string/join " " argv))
+            (log logger :debug (str "Contents of " tmpfile-name ":\n" (:invocation checkpoint))))
           (loop [out []
                  err []]
             (let [line (.readLine stdout)
                   errl (.readLine stderr)]
               (when-not (false? (:log checkpoint))
                 (when-not (clojure.string/blank? line)
-                  (log logger :info line))
+                  (log logger :debug line))
                 (when-not (clojure.string/blank? errl)
-                  (log logger :info errl)))
+                  (log logger :warn errl)))
               (if-not (and (nil? line)
                            (nil? errl))
                 (recur (if-not (nil? line)
