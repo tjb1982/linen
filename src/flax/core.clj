@@ -26,6 +26,13 @@
 (def logger (ClojureToolsLogger.))
 
 
+(defn upmap
+  [fn coll]
+  (doall
+    (for [p (doall (map #(future (fn %)) coll))]
+      @p)))
+
+
 (defn bool?
   [tester]
   (-> tester type (= java.lang.Boolean)))
@@ -369,7 +376,7 @@
                 (if (nil? yield)
                   (recur (drop 1 args))
                   yield))))
-                
+ 
           ;; Functions
           (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
             (if (coll? yield)
@@ -426,12 +433,13 @@
         exit (when-let [main (:main program)]
                (doall (pmap #(evaluate % config) main)))]
     (println "before destroying all nodes")
-    (doall
-      (pmap
-        (fn [[k n]]
-          (when (-> @(:node n) :options :destroy-on-exit true?)
-            (destroy n)))
-        @(-> config :node-manager :nodes)))
+    (doseq [f (remove nil?
+                (map
+                  (fn [[k n]]
+                    (when (-> @(:node n) :options :destroy-on-exit true?)
+                      (future (destroy n))))
+                  @(-> config :node-manager :nodes)))]
+      @f)
     exit
     ))
 
