@@ -27,9 +27,13 @@
 
 
 (defn upmap
-  [fn coll]
+  [fn coll & [delay]]
   (doall
-    (for [p (doall (map #(future (fn %)) coll))]
+    (for [p (doall
+              (map
+                #(do
+                   (Thread/sleep (or delay 0))
+                   (future (fn %)) coll)))]
       @p)))
 
 
