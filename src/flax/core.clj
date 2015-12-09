@@ -33,7 +33,8 @@
               (map
                 #(do
                    (Thread/sleep (or delay 0))
-                   (future (fn %)) coll)))]
+                   (future (fn %)))
+                coll))]
       @p)))
 
 
