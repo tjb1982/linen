@@ -437,7 +437,7 @@
         config (assoc config :env (evaluate (:env config) config))
         exit (when-let [main (:main program)]
                (doall (pmap #(evaluate % config) main)))]
-    (println "before destroying all nodes")
+    (log logger :info "Destroying nodes")
     (doseq [f (remove nil?
                 (map
                   (fn [[k n]]
@@ -485,13 +485,13 @@
 
           ;; Write the raw return value of the entire program to the
           ;; logs directory.
-          (println "before raw.json")
+          (log logger :info "Creating target/logs/raw.json")
           (spit "target/logs/raw.json" (json/generate-string return))
 
-          (println "before env.json")
+          (log logger :info "Creating target/logs/env.json")
           (spit "target/logs/env.json" (json/generate-string (evaluate (:env config) config)))
 
-          (println "before harvest.json")
+          (log logger :info "Creating target/logs/harvest.json")
           ;; Write any harvested values to the logs directory.
           (spit "target/logs/harvest.json"
                 (json/generate-string
@@ -503,7 +503,7 @@
                            {(keyword hkey) (harvest return config hkey [])})
                          (-> config :harvest)))))
 
-          (println "before collecting failures")
+          (log logger :info "Collecting failures")
           ;; Write the failing returns to the logs directory and exit with
           ;; the count of the failures.
           (let [failures (->> (returns return)
@@ -511,7 +511,7 @@
                               (filter #(and (-> % :throw)
                                             (-> % :exit :value zero? not))))
                 num-failures (count failures)]
-            (println "before failures.json")
+            (log logger :info "Creating target/logs/failures.json")
             (spit "target/logs/failures.json" (json/generate-string failures))
             (log logger :info (str "Failures: " num-failures))
             (log logger :info (str "Seed: " (.getTime effective)))

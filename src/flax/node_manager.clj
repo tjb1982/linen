@@ -37,7 +37,7 @@
                 (when-not (clojure.string/blank? line)
                   (log logger :debug line))
                 (when-not (clojure.string/blank? errl)
-                  (log logger :warn errl)))
+                  (log logger :debug errl)))
               (if-not (and (nil? line)
                            (nil? errl))
                 (recur (if-not (nil? line)
@@ -77,7 +77,7 @@
         (-> @nodes (get (full-node-name self node)))
         ;; Else, create the node and add it to the list of managed nodes.
         (let [ctor (-> node :connector resolve-connector)
-              node (-> (ctor logger) (create node (full-node-name self node)))]
+              node (-> (ctor (atom {:logger logger})) (create node (full-node-name self node)))]
           (-> node start)
           ;; The new node record has a :name which is the full node name.
           (swap! nodes #(assoc % (-> @(:node node) :name)
