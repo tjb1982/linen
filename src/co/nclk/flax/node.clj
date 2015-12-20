@@ -110,9 +110,7 @@
   (if (:invocation checkpoint)
     (binding [*log* (not (false? (:log checkpoint)))]
       (let [node (:data node)
-            agent (let [agent (ssh/ssh-agent {})]
-                    (ssh/add-identity agent {:private-key-path (-> @node :private-key)})
-                    agent)
+            agent (:ssh-agent @node)
             total-attempts 3]
         (loop [remaining-attempts total-attempts]
           (if (zero? remaining-attempts)
@@ -181,7 +179,10 @@
           (-> @nodes (get (full-node-name self node)))
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)
-                node (-> (ctor context) (create node (full-node-name self node)))]
+                node (-> (ctor context) (create node (full-node-name self node)))
+                agent (ssh/ssh-agent {})]
+            (ssh/add-identity agent {:name (:name @(:data @node)) :private-key (-> @(:data @node) :private-key)})
+            (swap! (:data @node) #(assoc % :ssh-agent agent))
             ;; The `node` returned from the constructor is a promise.
             ;; The new node record has some `:data` with a `:name` entry
             ;; which is the full node name. We add the node to the manager's
