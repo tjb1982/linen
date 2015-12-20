@@ -1,24 +1,5 @@
-data-connector: flax-file-connector.core
+data-connector: co.nclk.flax.data
 effective: 1444586330418
-program: ~/flax/resources/test-dir/programs/spock.yaml
-#program: ~/flax/resources/test-dir/programs/example.yaml
-dry-run: true
-log-script: true
+program: ~/nclk/flax/resources/program.yaml
 env:
-    SPOCK_NODE_NAME: spock
-    OPSC_HOME: ~{HOME}/ripcord
-    OPSC_BRANCH_NAME: yar-2-compat
-    SPOCK_USER: ubuntu
-    FORCE: false
-    PRIVATE_IP: true
-    NODE_CONNECTOR: flax-lxc-connector.core
-    NODE_CONFIG:
-        clone: ubuntu-base
-        retry: 100
-        delay: 100
-    TEST_DIR: ~/flax/resources/test-dir
-    GITHUB_PRIVATE_KEY: ~$ cat ~/.ssh/id_rsa
-    TARGET_NODE_COUNT: 3
-    API_TESTS:
-        - ~{HOME}/ripcord/spock/test/functional/api-tests/repository-credentials-test.yaml
-
+    LALA: lalalala
