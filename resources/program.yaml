@@ -1,0 +1,28 @@
+_node-config:
+- &ctool-config
+  launch:
+    force: true
+main:
+- module:
+    provides:
+    - key: OK
+    checkpoints:
+        groups:
+        - group:
+          - nodes:
+            - out: OK
+            invocation: whoami
+  out:
+    FOO: ~@OK
+  then:
+  - ~(println:
+    - ~@FOO
+    then:
+    - module:
+        checkpoints:
+            groups:
+            - group:
+              - nodes:
+                - out: TEST
+                invocation: echo ~{FOO} and other stuff
+

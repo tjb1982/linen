@@ -1,18 +1,15 @@
-(ns flax.core
+(ns co.nclk.flax.core
   (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [clj-yaml.core :as yaml]
             [cheshire.core :as json]
             [clojure.pprint :refer [pprint]]
-            [flax.logutil :refer :all]
-            [flax.protocols :refer :all]
-            [flax.node-manager :refer :all]
+            [clojure.tools.logging :refer [log]]
+            [co.nclk.flax.node :refer [invoke destroy node-manager]]
+            [co.nclk.flax.data :refer [resolve-module resolve-program]]
             [stencil.parser :refer [parse]]
             [stencil.core :refer [render]]
             )
-  (:import flax.node_manager.NodeManager
-           flax.node_manager.LocalConnector
-           flax.logutil.StandardLogger
-           flax.logutil.ClojureToolsLogger)
+  (:import co.nclk.flax.data.FileDataConnector)
   (:gen-class))
 
 
@@ -23,8 +20,6 @@
             (into {}
               (for [[k v] (System/getenv)]
                 [(keyword k) v]))))
-(def logger (ClojureToolsLogger.))
-
 
 (defn upmap
   [fn coll & [delay]]
@@ -36,6 +31,11 @@
                    (future (fn %)))
                 coll))]
       @p)))
+
+
+(defn flog
+  [level message]
+  (log level message))
 
 
 (defn bool?
@@ -57,6 +57,14 @@
       (= (clojure.string/trim s) "~@")
       env
 
+      ;; Support for keywords.
+      (.startsWith s "~:")
+      (keyword (subs s 2))
+
+      ;; Support for symbols
+      (.startsWith s "~'")
+      (symbol (subs s 2))
+
       ;; If `s` starts with ~@, then replace it with the data held by the
       ;; variable (i.e., not a string interpolation of it).
       (.startsWith s "~@")
@@ -70,7 +78,7 @@
             proc (-> (Runtime/getRuntime)
                    (.exec (into-array String
                             ["bash" "-c" (clojure.string/trim s)])))
-            stdout (stream-to-reader (.getInputStream proc))]
+            stdout (clojure.java.io/reader (.getInputStream proc))]
         (clojure.string/join "\n"
           (loop [lines []]
             (let [line (.readLine stdout)]
@@ -117,26 +125,27 @@
         ;; to the `invoke` function. We also evaluate the checkpoint to make
         ;; sure the variables are mapped to their appropriate values from the
         ;; environment.
-        checkpoint (assoc-flags (evaluate checkpoint config) config)]
-    (log logger :info (:display checkpoint))
+        checkpoint (assoc-flags (evaluate checkpoint config) config)
+        checkpoint (assoc checkpoint :runid (java.util.UUID/randomUUID))]
+
     (if (:nodes checkpoint)
       ;; Run the checkpoint on some nodes in parallel.
-      (doall
-        (pmap
-          #(-> config :node-manager
-            (get-node %)
-            (invoke (assoc checkpoint :out [(:out checkpoint)
-                                            (:out %)]
-                                      :err [(:err checkpoint)
-                                            (:err %)]
-                                      :exit [(:exit checkpoint)
-                                             (:exit %)]
-                                      :user (:user %))))
-          (:nodes checkpoint)))
+      (->> (:nodes checkpoint)
+        (upmap
+          #(invoke
+            (-> config :node-manager)
+            (assoc checkpoint :out [(:out checkpoint)
+                                    (:out %)]
+                              :err [(:err checkpoint)
+                                    (:err %)]
+                              :exit [(:exit checkpoint)
+                                     (:exit %)]
+                              :user (:user %))
+            %)))
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
-      (list (-> local-connector (invoke checkpoint))))
-    ))
+      (list (-> config :node-manager (invoke checkpoint :local)))
+    )))
 
 
 (defn run-module
@@ -158,12 +167,11 @@
     (if-not (empty? missing)
       ;; If some of the `requires` interfaces are missing, don't bother running it, and
       ;; return nil.
-      (-> logger
-        (log :error
-          (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\nEnvironment:\n%s"
-                  (:name m)
-                  (into [] (map first missing))
-                  (:env c))))
+      (log :error
+        (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\nEnvironment:\n%s"
+                (:name m)
+                (into [] (map first missing))
+                (:env c)))
       ;; All `requires` interfaces exist, so we're a "go."
       ;; Run the checkpoints. Each checkpoint run will return its return code and
       ;; the vars that should be added to the env.
@@ -378,9 +386,20 @@
           (loop [args (-> fun-entry val)]
             (when-not (empty? args)
               (let [yield (evaluate (first args) config)]
-                (if (nil? yield)
+                (if-not yield
                   (recur (drop 1 args))
                   yield))))
+
+          'and
+          (loop [args (-> fun-entry val)
+                 last-yield nil]
+            (if (empty? args)
+              last-yield
+              (let [yield (evaluate (first args) config)]
+                (if-not yield
+                  false
+                  (recur (drop 1 args) yield)))))
+                
  
           ;; Functions
           (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
@@ -437,14 +456,13 @@
         config (assoc config :env (evaluate (:env config) config))
         exit (when-let [main (:main program)]
                (doall (pmap #(evaluate % config) main)))]
-    (log logger :info "Destroying nodes")
-    (doseq [f (remove nil?
-                (map
-                  (fn [[k n]]
-                    (when (-> @(:node n) :options :destroy-on-exit true?)
-                      (future (destroy n))))
-                  @(-> config :node-manager :nodes)))]
-      @f)
+    (log :info "Cleaning up.")
+    (upmap
+      (fn [[k n]]
+        (when (:data n)
+          (when (-> @(:data n) :options :destroy-on-exit true?)
+            (destroy n))))
+      @(-> config :node-manager :nodes))
     exit
     ))
 
@@ -455,75 +473,85 @@
   ;; what these options can be. It's not particularly easy. -- tjb
   (swap! parser-options #(merge % (or (:parser-options config) {})))
   (try
-    ;; dynamically require the namespace containing the data-connector
-    (require (symbol (:data-connector config)))
+    ;; Dynamically require the namespace containing the data-connector
+    ;; and call its constructor; if no data-connector is specified, then
+    ;; use the built-in FileDataConnector.
+    (let [data-connector (if (:data-connector config)
+                           (let [dc-ctor (do (-> config :data-connector symbol require)
+                                             (-> config :data-connector (str "/connector") symbol resolve))]
+                             (if-not dc-ctor
+                               ;; we can't proceed without any way of resolving the location of the program
+                               (die (format "Constructor for data connector `%s` not found" (:data-connector config)))
+                               (dc-ctor)))
+                           (FileDataConnector.))
+          effective (let [effective (java.util.Date.
+                                      (or (:effective config)
+                                          (-> (java.util.Date.) .getTime)))]
+                      (log :info (str "Seed: " (.getTime effective)))
+                      effective)
+          return (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
+                                            ;; as a seed for any pseudorandom number generation, so that
+                                            ;; randomized testing can be retested as deterministically
+                                            ;; as possible.
+                                            :effective effective
+                                            ;; Instantiate a node manager with an empty node map as an atom.
+                                            ;; Takes a seed.
+                                            :node-manager (node-manager effective)
+                                            ;; The data connector is for resolving literal
+                                            ;; representations of particular resources. In the future,
+                                            ;; database persistence should be supported, with
+                                            ;; continued support for file based configuration, too.
+                                            :data-connector data-connector))]
 
-    (let [dc-ctor (-> config :data-connector (str "/connector") symbol resolve)]
-      (if-not dc-ctor
-        ;; we can't proceed without any way of resolving the location of the program
-        (die (format "Constructor for data connector `%s` not found" (-> config :data-connector)))
-        (let [effective (let [effective (java.util.Date.
-                                          (or (:effective config)
-                                              (-> (java.util.Date.) .getTime)))]
-                          (log logger :info (str "Seed: " (.getTime effective)))
-                          effective)
-              return (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
-                                                ;; as a seed for any pseudorandom number generation, so that
-                                                ;; randomized testing can be retested as deterministically
-                                                ;; as possible.
-                                                :effective effective
-                                                ;; Instantiate a node manager with an empty node map as an atom.
-                                                :node-manager (node-manager effective 0 logger)
-                                                ;; The data connector is for resolving literal
-                                                ;; representations of particular resources. In the future,
-                                                ;; database persistence should be supported, with
-                                                ;; continued support for file based configuration, too.
-                                                :data-connector (dc-ctor)))]
+      ;; `return` is a fully evaluated data structure based on the data
+      ;; structure of the program.
 
-          ;; `return` is a fully evaluated data structure based on the data
-          ;; structure of the program.
+      ;; First make sure that target/logs exists
+      (clojure.java.io/make-parents "target/logs/foo")
 
-          ;; Write the raw return value of the entire program to the
-          ;; logs directory.
-          (log logger :info "Creating target/logs/raw.json")
-          (spit "target/logs/raw.json" (json/generate-string return))
+      ;; Write the raw return value of the entire program to the
+      ;; logs directory.
+      (log :info "Creating target/logs/raw.json")
+      (spit "target/logs/raw.json" (json/generate-string return))
 
-          (log logger :info "Creating target/logs/env.json")
-          (spit "target/logs/env.json" (json/generate-string (evaluate (:env config) config)))
+      (log :info "Creating target/logs/env.json")
+      (spit "target/logs/env.json" (json/generate-string (evaluate (:env config) config)))
 
-          (log logger :info "Creating target/logs/harvest.json")
-          ;; Write any harvested values to the logs directory.
-          (spit "target/logs/harvest.json"
-                (json/generate-string
-                  (reduce
-                    (fn [harvested rset]
-                      (merge harvested rset))
-                    {}
-                    (map (fn [hkey]
-                           {(keyword hkey) (harvest return config hkey [])})
-                         (-> config :harvest)))))
+      (log :info "Creating target/logs/harvest.json")
+      ;; Write any harvested values to the logs directory.
+      (spit "target/logs/harvest.json"
+            (json/generate-string
+              (reduce
+                (fn [harvested rset]
+                  (merge harvested rset))
+                {}
+                (map (fn [hkey]
+                       {(keyword hkey) (harvest return config hkey [])})
+                     (-> config :harvest)))))
 
-          (log logger :info "Collecting failures")
-          ;; Write the failing returns to the logs directory and exit with
-          ;; the count of the failures.
-          (let [failures (->> (returns return)
-                              (remove #(-> % :exit :value nil?))
-                              (filter #(and (-> % :throw)
-                                            (-> % :exit :value zero? not))))
-                num-failures (count failures)]
-            (log logger :info "Creating target/logs/failures.json")
-            (spit "target/logs/failures.json" (json/generate-string failures))
-            (log logger :info (str "Failures: " num-failures))
-            (log logger :info (str "Seed: " (.getTime effective)))
+      (log :info "Collecting failures")
+      ;; Write the failing returns to the logs directory and exit with
+      ;; the count of the failures.
+      (let [failures (->> (returns return)
+                          (remove #(-> % :exit :value nil?))
+                          (filter #(and (-> % :throw)
+                                        (-> % :exit :value zero? not))))
+            num-failures (count failures)]
+        (log :info "Creating target/logs/failures.json")
+        (spit "target/logs/failures.json" (json/generate-string failures))
+        (log :info (str "Failures: " num-failures))
+        (log :info (str "Seed: " (.getTime effective)))
 
-            ;; Allow time for agents to finish logging.
-            (Thread/sleep 1000)
-            ;; Kill the agents so the program exits without further delay.
-            (shutdown-agents)
+        ;; Allow time for agents to finish logging.
+        (Thread/sleep 1000)
+        ;; Kill the agents so the program exits without further delay.
+        (shutdown-agents)
 
-            num-failures)
-          )))
+        num-failures))
     (catch java.io.FileNotFoundException fnfe
       (die "Resource could not be found:" (.getMessage fnfe)))
     ))
+
+(defn -main [& argv]
+  (run (yaml/parse-string (slurp "resources/flax.yaml"))))
 
