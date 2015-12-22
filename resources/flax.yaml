@@ -1,5 +1,7 @@
 data-connector: co.nclk.flax.data
 effective: 1444586330418
 program: ~/nclk/flax/resources/program.yaml
+harvest:
+- test-rail
 env:
     LALA: lalalala

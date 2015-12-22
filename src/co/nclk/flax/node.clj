@@ -55,8 +55,6 @@
   [out err exit node-name runid]
   (when-not (clojure.string/blank? out)
     (log :debug (node-log-str node-name runid "stdout: " (clojure.string/trim out))))
-  (when-not (zero? exit)
-    (log :error (node-log-str node-name runid "Failed.")))
   (when-not (clojure.string/blank? err)
     (log :debug
       (node-log-str node-name runid "stderr: " (clojure.string/trim err)))))
@@ -96,8 +94,8 @@
                 out (clojure.string/join "\n" @out)
                 err (clojure.string/join "\n" @err)
                 result
-                (assoc checkpoint :out {:keys (:out checkpoint) :value (clojure.string/join "\n" out)}
-                                  :err {:keys (:err checkpoint) :value (clojure.string/join "\n" err)}
+                (assoc checkpoint :out {:keys (:out checkpoint) :value out}
+                                  :err {:keys (:err checkpoint) :value err}
                                   :exit {:keys (:exit checkpoint) :value exit})]
             (clojure.java.io/delete-file tmpfile-name)
             (when-not (zero? exit)

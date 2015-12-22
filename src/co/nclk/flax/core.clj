@@ -2,6 +2,7 @@
   (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [clj-yaml.core :as yaml]
             [cheshire.core :as json]
+            [cheshire.generate :refer [add-encoder encode-str]]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :refer [log]]
             [co.nclk.flax.node :refer [invoke destroy node-manager]]
@@ -12,10 +13,10 @@
   (:import co.nclk.flax.data.FileDataConnector)
   (:gen-class))
 
+;; Cheshire encoder for all things Runnable.
+(add-encoder java.lang.Runnable encode-str)
 
 (def parser-options (atom {:tag-open "~{" :tag-close "}"}))
-(def help
-  (str "usage: flax path/to/properties.yaml"))
 (def genv (atom
             (into {}
               (for [[k v] (System/getenv)]
@@ -116,6 +117,23 @@
                      %))))
       (if (map? m) (:groups m) m))))
 
+
+(defn assert-checkpoint
+  [resolved config node]
+  (let [{:keys [out err exit]} resolved
+        assert-fn (evaluate (or (:assert node) (:assert resolved)) config)
+        success (if (or (nil? assert-fn)
+                        (bool? assert-fn))
+                  (if (true? assert-fn) (zero? (:value exit)) true)
+                  (apply assert-fn (map :value [out err exit])))]
+    (when (not (true? success))
+      (log :error (str "[" (:runid resolved) "] Failed."))) 
+    (if (and (not (true? success))
+             (or (:throw node) (:throw resolved)))
+      (throw (AssertionError. (assoc-in resolved [:success :value] false)))
+      (assoc-in resolved [:success :value] success))))
+
+
 (defn run-checkpoint
   [checkpoint config]
   (let [;; First we snag the flags from the checkpoint
@@ -125,27 +143,34 @@
         ;; to the `invoke` function. We also evaluate the checkpoint to make
         ;; sure the variables are mapped to their appropriate values from the
         ;; environment.
-        checkpoint (assoc-flags (evaluate checkpoint config) config)
-        checkpoint (assoc checkpoint :runid (java.util.UUID/randomUUID))]
+        checkpoint (-> checkpoint
+                     (assoc-flags config)
+                     (evaluate config)
+                     (assoc :runid (java.util.UUID/randomUUID)))]
 
     (if (:nodes checkpoint)
       ;; Run the checkpoint on some nodes in parallel.
       (->> (:nodes checkpoint)
         (upmap
-          #(invoke
-            (-> config :node-manager)
-            (assoc checkpoint :out [(:out checkpoint)
-                                    (:out %)]
-                              :err [(:err checkpoint)
-                                    (:err %)]
-                              :exit [(:exit checkpoint)
-                                     (:exit %)]
-                              :user (:user %))
-            %)))
+          #(-> config
+            :node-manager
+            (invoke
+              (assoc checkpoint :out [(:out checkpoint)
+                                      (:out %)]
+                                :err [(:err checkpoint)
+                                      (:err %)]
+                                :exit [(:exit checkpoint)
+                                       (:exit %)]
+                                :success {:keys [(:success checkpoint)
+                                                 (:success %)]}
+                                :user (:user %))
+              %)
+            (assert-checkpoint config %)
+            )))
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
-      (list (-> config :node-manager (invoke checkpoint :local)))
-    )))
+      (list (-> config :node-manager (invoke checkpoint :local) (assert-checkpoint config {}))))
+    ))
 
 
 (defn run-module
@@ -199,9 +224,11 @@
                                       (let [out-arr (-> checkpoint :out :keys first keyword)
                                             err-arr (-> checkpoint :err :keys first keyword)
                                             exit-arr (-> checkpoint :exit :keys first keyword)
+                                            success-arr (-> checkpoint :success :keys first keyword)
                                             out (-> checkpoint :out :value)
                                             err (-> checkpoint :err :value)
-                                            exit (-> checkpoint :exit :value)]
+                                            exit (-> checkpoint :exit :value)
+                                            success (-> checkpoint :success :value)]
                                         (reduce (fn [env [k v]]
                                                   (if-not (nil? k)
                                                     (assoc env k v) env))
@@ -211,7 +238,9 @@
                                                  [err-arr (conj (get env err-arr) err)]
                                                  [(-> checkpoint :err :keys second keyword) err]
                                                  [exit-arr (conj (get env exit-arr) exit)]
-                                                 [(-> checkpoint :exit :keys second keyword) exit]])))
+                                                 [(-> checkpoint :exit :keys second keyword) exit]
+                                                 [success-arr (conj (get env success-arr) success)]
+                                                 [(-> checkpoint :success :keys second keyword) success]])))
                                     env
                                     return)))
                         {}
@@ -283,26 +312,6 @@
       rets m)
 
     :else rets))
-
-
-(defn exits
-  [m & [es]]
-  (cond
-    (map? m)
-    (if-let [e (-> m :exit :value)]
-      (conj es e)
-      (reduce
-        (fn [es [k v]]
-          (exits v es))
-        es m))
-
-    (coll? m)
-    (reduce
-      (fn [es x]
-        (exits x es))
-      es m)
-
-    :else es))
 
 
 (defn evaluate
@@ -433,7 +442,9 @@
       :else
       (into (empty m)
         (map (fn [[k v]]
-               [(evaluate k config) (evaluate v config)])
+               (if (= k :assert)
+                 [k v]
+                 [(evaluate k config) (evaluate v config)]))
              m)))
 
     ;; Other collections
@@ -454,15 +465,25 @@
                       "The configuration must have a program property, which must be a path to a valid yaml document:"
                       (.getMessage e))))
         config (assoc config :env (evaluate (:env config) config))
-        exit (when-let [main (:main program)]
-               (doall (pmap #(evaluate % config) main)))]
-    (log :info "Cleaning up.")
-    (upmap
-      (fn [[k n]]
-        (when (:data n)
-          (when (-> @(:data n) :options :destroy-on-exit true?)
-            (destroy n))))
-      @(-> config :node-manager :nodes))
+        exit (try
+               (when-let [main (:main program)]
+                 (doall (pmap #(evaluate % config) main)))
+               #_(catch java.util.concurrent.ExecutionException ae
+                 (loop [cause ae]
+                   (if (nil? cause)
+                     (throw ae)
+                     (if (= (type cause) java.lang.AssertionError)
+                       (log :error (str cause))
+                       (recur (.getCause cause))))))
+               (finally
+                 (log :info "Cleaning up.")
+                 (upmap
+                   (fn [[k n]]
+                     (when (:data n)
+                       (when (-> @(:data n) :options :destroy-on-exit true?)
+                         (destroy n))))
+                   @(-> config :node-manager :nodes))
+                 (log :info "Done cleaning up.")))]
     exit
     ))
 
@@ -532,10 +553,9 @@
       (log :info "Collecting failures")
       ;; Write the failing returns to the logs directory and exit with
       ;; the count of the failures.
-      (let [failures (->> (returns return)
-                          (remove #(-> % :exit :value nil?))
-                          (filter #(and (-> % :throw)
-                                        (-> % :exit :value zero? not))))
+      (let [checkpoints (returns return)
+            failures (->> checkpoints
+                          (filter #(-> % :success :value false?)))
             num-failures (count failures)]
         (log :info "Creating target/logs/failures.json")
         (spit "target/logs/failures.json" (json/generate-string failures))
@@ -553,5 +573,5 @@
     ))
 
 (defn -main [& argv]
-  (run (yaml/parse-string (slurp "resources/flax.yaml"))))
+  (run (yaml/parse-string (slurp (first argv)))))
 
