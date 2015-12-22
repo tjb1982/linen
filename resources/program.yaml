@@ -16,13 +16,45 @@ main:
     FOO: ~@OK
   then:
   - ~(println:
+    - "This was said:"
     - ~@FOO
     then:
     - module:
+        provides:
+        - key: USEFUL
+        - key: EXIT
+        - key: SUCCESS
         checkpoints:
             groups:
             - group:
               - nodes:
-                - out: TEST
-                invocation: echo ~{FOO} and other stuff
+                - out: USEFUL
+                  exit: EXIT
+                  success: SUCCESS
+                throw: false
+                assert:
+                    ~(fn:
+                    - [ out, err, exit ]
+                    - ~(and:
+                      - ~(not:
+                        - ~(clojure.string/blank?:
+                          - ~@out
+                      - ~(=:
+                        - ~@FOO
+                        - Tbrennan-RMBP
+                      - true
+                invocation: |
+                  echo FOO=~{FOO} and some other stuff
+                  exit 1
+      out:
+        MY_USEFUL: ~@USEFUL
+        MY_EXIT: ~@EXIT
+        MY_SUCCESS: ~@SUCCESS
+      then:
+      - test-rail:
+          name: A useful test 
+          case: 12
+          success: ~@MY_SUCCESS
+          exit: ~@MY_EXIT
+          other: ~@MY_USEFUL
 
