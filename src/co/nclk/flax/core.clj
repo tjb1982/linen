@@ -5,7 +5,6 @@
             [cheshire.generate :refer [add-encoder encode-str]]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :refer [log]]
-            [clojure.data.xml :as xml]
             [co.nclk.flax.node :refer [invoke destroy node-manager]]
             [co.nclk.flax.data :refer [resolve-module resolve-program]]
             [stencil.parser :refer [parse]]
