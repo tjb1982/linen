@@ -5,6 +5,7 @@
             [cheshire.generate :refer [add-encoder encode-str]]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :refer [log]]
+            [clojure.data.xml :as xml]
             [co.nclk.flax.node :refer [invoke destroy node-manager]]
             [co.nclk.flax.data :refer [resolve-module resolve-program]]
             [stencil.parser :refer [parse]]
@@ -347,7 +348,11 @@
         (condp = fun
           ;; Special forms
           'if
-          (eval (conj (evaluate (-> fun-entry val) config) fun))
+          (evaluate
+            ((if (evaluate (-> fun-entry val first) config)
+               second #(nth % 2 nil))
+              (-> fun-entry val))
+            config)
 
           'fn
           (fn [& argv]
@@ -413,6 +418,7 @@
           ;; Functions
           (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
             (if (coll? yield)
+              ;; Laziness disabled.
               (doall yield)
               yield))))
 
@@ -557,6 +563,9 @@
             failures (->> checkpoints
                           (filter #(-> % :success :value false?)))
             num-failures (count failures)]
+
+        (log :info "Creating target/logs/checkpoints.json")
+        (spit "target/logs/checkpoints.json" (json/generate-string checkpoints))
         (log :info "Creating target/logs/failures.json")
         (spit "target/logs/failures.json" (json/generate-string failures))
         (log :info (str "Failures: " num-failures))
