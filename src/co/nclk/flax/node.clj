@@ -192,10 +192,12 @@
     (assoc checkpoint :out {:keys (:out checkpoint)}
                       :err {:keys (:err checkpoint)}
                       :exit {:keys (:exit checkpoint) :value 0})
-    (if (= "local" (full-node-name self node))
-      (invoke-local checkpoint)
-      (invoke-remote checkpoint (get-node self node))
-      )
+    (let [ts (java.util.Date.)]
+      (assoc (if (= "local" (full-node-name self node))
+               (invoke-local checkpoint)
+               (invoke-remote checkpoint (get-node self node)))
+             :started (.getTime ts)
+             :finished (.getTime (java.util.Date.))))
     )
   (remove-node [self node] nodes)
   (full-node-name [self node]
