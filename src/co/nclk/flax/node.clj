@@ -113,7 +113,8 @@
         (loop [remaining-attempts total-attempts]
           (if (zero? remaining-attempts)
             (assoc checkpoint :out {:keys (:out checkpoint) :value ""}
-                              :err {:keys (:err checkpoint) :value (str "flax: " total-attempts " attempts to ssh to " (:name @node) " failed.")}
+                              :err {:keys (:err checkpoint)
+                                    :value (str "flax: " total-attempts " attempts to ssh to " (:name @node) " failed.")}
                               :exit {:keys (:exit checkpoint) :value 1})
             (if-let [resolved-checkpoint
                      (try

@@ -412,6 +412,13 @@
                 (if-not yield
                   false
                   (recur (drop 1 args) yield)))))
+
+          'parallel
+          (upmap #(evaluate % config)
+            (-> fun-entry val))
+
+          'upmap
+          (apply upmap (evaluate (-> m first val) config))
                 
  
           ;; Functions
