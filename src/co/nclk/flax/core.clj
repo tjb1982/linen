@@ -22,6 +22,7 @@
               (for [[k v] (System/getenv)]
                 [(keyword k) v]))))
 
+
 (defn upmap
   [fn coll & [delay]]
   (doall
@@ -32,11 +33,6 @@
                    (future (fn %)))
                 coll))]
       @p)))
-
-
-(defn flog
-  [level message]
-  (log level message))
 
 
 (defn bool?
@@ -413,13 +409,19 @@
                   false
                   (recur (drop 1 args) yield)))))
 
-          'parallel
+          'parallelize
           (upmap #(evaluate % config)
             (-> fun-entry val))
 
           'upmap
           (apply upmap (evaluate (-> m first val) config))
-                
+
+          'log
+          (let [args (-> fun-entry val)]
+            (log (-> args first keyword)
+                 (apply str
+                   (map #(evaluate % config) (drop 1 args)))))
+
  
           ;; Functions
           (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
