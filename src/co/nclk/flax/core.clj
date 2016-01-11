@@ -418,7 +418,7 @@
 
           'log
           (let [args (-> fun-entry val)]
-            (log (-> args first keyword)
+            (log (evaluate (-> args first keyword) config)
                  (apply str
                    (map #(evaluate % config) (drop 1 args)))))
 
@@ -511,7 +511,8 @@
     ;; Dynamically require the namespace containing the data-connector
     ;; and call its constructor; if no data-connector is specified, then
     ;; use the built-in FileDataConnector.
-    (let [data-connector (if (:data-connector config)
+    (let [config (evaluate config config)
+          data-connector (if (:data-connector config)
                            (let [dc-ctor (do (-> config :data-connector symbol require)
                                              (-> config :data-connector (str "/connector") symbol resolve))]
                              (if-not dc-ctor
