@@ -63,11 +63,12 @@
 (defn- invoke-local
   [checkpoint]
   (binding [*log* (not (false? (:log checkpoint)))]
-    (let [tmpfile-name (str ".flax-temp-script-" (java.util.UUID/randomUUID))
+    (let [tmpfile-name (str (System/getProperty "user.dir") ".flax-temp-script-" (java.util.UUID/randomUUID))
           argv (remove nil?
                  (flatten
-                   [(if-let [u (:user checkpoint)] ["sudo" "-u" u]) "bash" tmpfile-name]))]
+                   [(if-let [u (:user checkpoint)] ["sudo" "-u" u]) tmpfile-name]))]
       (spit tmpfile-name (:invocation checkpoint))
+      (-> (java.io.File. tmpfile-name) (.setExecutable true))
       (let [proc (-> (Runtime/getRuntime)
                    (.exec (into-array String argv)))
             stdout (clojure.java.io/reader (.getInputStream proc))
