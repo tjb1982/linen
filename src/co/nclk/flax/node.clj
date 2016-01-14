@@ -69,6 +69,7 @@
                    [(if-let [u (:user checkpoint)] ["sudo" "-u" u]) tmpfile-name]))]
       (spit tmpfile-name (:invocation checkpoint))
       (-> (java.io.File. tmpfile-name) (.setExecutable true))
+      (Thread/sleep 100)
       (let [proc (-> (Runtime/getRuntime)
                    (.exec (into-array String argv)))
             stdout (clojure.java.io/reader (.getInputStream proc))
