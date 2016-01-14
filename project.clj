@@ -1,6 +1,6 @@
-(defproject co.nclk/flax "0.1.0-SNAPSHOT"
-  :description "No description yet."
-  :url "http://flax.nclk.co/"
+(defproject co.nclk/flax "0.1.0"
+  :description "Implementation of an interpreter for flax, a domain specific language for modeling coordinated, distributed processes."
+  :url "https://github.com/tjb1982/flax"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.7.0"]
