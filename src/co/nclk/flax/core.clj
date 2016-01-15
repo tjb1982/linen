@@ -50,6 +50,7 @@
   [s env]
   (let [env (merge @genv env)]
     (cond
+
       ;; Env dump.
       (= (clojure.string/trim s) "~@")
       env
@@ -173,7 +174,8 @@
   [m c]
   ;; Check that the required params exist in the env for this module to run.
   ;; Either the param exists, or the module defines a default to use instead.
-  (let [vars (map #(or (contains? % :default)
+  (let [env (merge @genv (-> c :env))
+        vars (map #(or (contains? % :default)
                        (-> % :key keyword))
                    (-> m :requires))
         missing (remove #(-> % second true?)
@@ -183,7 +185,7 @@
                                            (true? v))
                                       ;; Or is it a keyword and found in the current env?
                                       (and (keyword? v)
-                                           (not (nil? (-> c :env v)))))])
+                                           (not (nil? (-> env v)))))])
                              vars))]
     (if-not (empty? missing)
       ;; If some of the `requires` interfaces are missing, don't bother running it, and
@@ -192,7 +194,7 @@
         (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\nEnvironment:\n%s"
                 (:name m)
                 (into [] (map first missing))
-                (:env c)))
+                env))
       ;; All `requires` interfaces exist, so we're a "go."
       ;; Run the checkpoints. Each checkpoint run will return its return code and
       ;; the vars that should be added to the env.
@@ -310,162 +312,170 @@
     :else rets))
 
 
+(declare run-program)
+
+
 (defn evaluate
   [m config]
-  (cond
-    (string? m)
-    (swap m (:env config))
-
-    (keyword? m)
-    (keyword (swap (subs (str m) 1) (:env config)))
-
-    (symbol? m)
-    (symbol (swap (name m) (:env config)))
-
-    (map? m)
+  (let [config (assoc config :env (merge @genv (:env config)))]
     (cond
+      (string? m)
+      (swap m (:env config))
 
-      ;; Contains :then
-      (contains? m :then)
-      ;; `dissoc` the :then entry and run it as if it didn't exist.
-      ;; Then, extract the new environment from the result, and run the 
-      ;; :then entry with that environment.
-      (let [patch (evaluate (dissoc m :then) config)
-            env (extract-env patch (:env config))]
-        (concat [patch]
-                (doall (pmap #(evaluate % (assoc config :env env))
-                             (:then m)))))
+      (keyword? m)
+      (keyword (swap (subs (str m) 1) (:env config)))
 
-      ;; Functions and special forms
-      (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
-      (let [fun-entry (->> m (filter #(-> % key str (subs 1) (.startsWith "~("))) first)
-            fun (-> fun-entry key str (subs 3) symbol)]
-        (condp = fun
-          ;; Special forms
-          'if
-          (evaluate
-            ((if (evaluate (-> fun-entry val first) config)
-               second #(nth % 2 nil))
+      (symbol? m)
+      (symbol (swap (name m) (:env config)))
+
+      (map? m)
+      (cond
+
+        ;; Contains :resolve
+        (contains? m :resolve)
+        (run-program (assoc config :program (str (:resolve m))))
+
+        ;; Contains :then
+        (contains? m :then)
+        ;; `dissoc` the :then entry and run it as if it didn't exist.
+        ;; Then, extract the new environment from the result, and run the 
+        ;; :then entry with that environment.
+        (let [patch (evaluate (dissoc m :then) config)
+              env (extract-env patch (:env config))]
+          (concat [patch]
+                  (doall (pmap #(evaluate % (assoc config :env env))
+                               (:then m)))))
+
+        ;; Functions and special forms
+        (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
+        (let [fun-entry (->> m (filter #(-> % key str (subs 1) (.startsWith "~("))) first)
+              fun (-> fun-entry key str (subs 3) symbol)]
+          (condp = fun
+            ;; Special forms
+            'if
+            (evaluate
+              ((if (evaluate (-> fun-entry val first) config)
+                 second #(nth % 2 nil))
+                (-> fun-entry val))
+              config)
+
+            'fn
+            (fn [& argv]
+              (let [args (-> fun-entry val first) ;; list of strings
+                    statements (->> fun-entry val (drop 1))
+                    env (loop [args args
+                               argv argv
+                               env (:env config)]
+                          (if (empty? args)
+                            env
+                            (let [env (merge env
+                                             {(evaluate (keyword (first args)) config)
+                                              (evaluate (first argv) config)})]
+                              (recur (drop 1 args)
+                                     (drop 1 argv)
+                                     env))))]
+                (loop [statements statements last-ret nil]
+                  (if (empty? statements)
+                    last-ret
+                    (let [ret (evaluate (first statements) (assoc config :env env))]
+                      (recur (drop 1 statements) ret)))))) 
+
+            (symbol "#")
+            (fn [& argv]
+              (let [env (merge (:env config)
+                               (into {}
+                                 (map-indexed
+                                   (fn [idx item] [(keyword (str idx)) (evaluate item config)])
+                                   argv)))]
+                (loop [statements (-> fun-entry val) last-ret nil]
+                  (if (empty? statements)
+                    last-ret
+                    (let [ret (evaluate (first statements) (assoc config :env env))]
+                      (recur (drop 1 statements) ret))))))
+
+            'for
+            (let [coll (-> fun-entry val first second (evaluate config))]
+              (doall
+                (map
+                  #(let [env (merge (:env config) {(keyword (-> fun-entry val ffirst (evaluate config))) %})]
+                    (evaluate (->> fun-entry val (drop 1)) (assoc config :env env)))
+                  coll)))
+
+            'or
+            (loop [args (-> fun-entry val)]
+              (when-not (empty? args)
+                (let [yield (evaluate (first args) config)]
+                  (if-not yield
+                    (recur (drop 1 args))
+                    yield))))
+
+            'and
+            (loop [args (-> fun-entry val)
+                   last-yield nil]
+              (if (empty? args)
+                last-yield
+                (let [yield (evaluate (first args) config)]
+                  (if-not yield
+                    false
+                    (recur (drop 1 args) yield)))))
+
+            'parallelize
+            (upmap #(evaluate % config)
               (-> fun-entry val))
-            config)
 
-          'fn
-          (fn [& argv]
-            (let [args (-> fun-entry val first) ;; list of strings
-                  statements (->> fun-entry val (drop 1))
-                  env (loop [args args
-                             argv argv
-                             env (:env config)]
-                        (if (empty? args)
-                          env
-                          (let [env (merge env
-                                           {(evaluate (keyword (first args)) config)
-                                            (evaluate (first argv) config)})]
-                            (recur (drop 1 args)
-                                   (drop 1 argv)
-                                   env))))]
-              (loop [statements statements last-ret nil]
-                (if (empty? statements)
-                  last-ret
-                  (let [ret (evaluate (first statements) (assoc config :env env))]
-                    (recur (drop 1 statements) ret)))))) 
+            'upmap
+            (apply upmap (evaluate (-> m first val) config))
 
-          (symbol "#")
-          (fn [& argv]
-            (let [env (merge (:env config)
-                             (into {}
-                               (map-indexed
-                                 (fn [idx item] [(keyword (str idx)) (evaluate item config)])
-                                 argv)))]
-              (loop [statements (-> fun-entry val) last-ret nil]
-                (if (empty? statements)
-                  last-ret
-                  (let [ret (evaluate (first statements) (assoc config :env env))]
-                    (recur (drop 1 statements) ret))))))
-
-          'for
-          (let [coll (-> fun-entry val first second (evaluate config))]
-            (doall
-              (map
-                #(let [env (merge (:env config) {(keyword (-> fun-entry val ffirst (evaluate config))) %})]
-                  (evaluate (->> fun-entry val (drop 1)) (assoc config :env env)))
-                coll)))
-
-          'or
-          (loop [args (-> fun-entry val)]
-            (when-not (empty? args)
-              (let [yield (evaluate (first args) config)]
-                (if-not yield
-                  (recur (drop 1 args))
-                  yield))))
-
-          'and
-          (loop [args (-> fun-entry val)
-                 last-yield nil]
-            (if (empty? args)
-              last-yield
-              (let [yield (evaluate (first args) config)]
-                (if-not yield
-                  false
-                  (recur (drop 1 args) yield)))))
-
-          'parallelize
-          (upmap #(evaluate % config)
-            (-> fun-entry val))
-
-          'upmap
-          (apply upmap (evaluate (-> m first val) config))
-
-          'log
-          (let [args (-> fun-entry val)]
-            (log (evaluate (-> args first keyword) config)
-                 (apply str
-                   (map #(evaluate % config) (drop 1 args)))))
+            'log
+            (let [args (-> fun-entry val)]
+              (log (evaluate (-> args first keyword) config)
+                   (apply str
+                     (map #(evaluate % config) (drop 1 args)))))
 
  
-          ;; Functions
-          (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
-            (if (coll? yield)
-              ;; Laziness disabled.
-              (doall yield)
-              yield))))
+            ;; Functions
+            (let [yield (apply (resolve fun) (evaluate (-> m first val) config))]
+              (if (coll? yield)
+                ;; Laziness disabled.
+                (doall yield)
+                yield))))
 
 
-      ;; Modules
-      (contains? m :module)
-      (let [config (assoc config :env (merge (:env config)
-                                             (evaluate (:in m) config)))
-            module (if (string? (:module m))
-                     (resolve-module
-                       (:data-connector config)
-                       (evaluate (:module m) config))
-                     (:module m))
-            ;; Run the module. Each module returns a report with a new env
-            ;; based on what it requires/provides, and a list of return values
-            ;; for each checkpoint.
-            report (run-module module (assoc-flags config m))
-            ;; The new env is made up of the old env, with any keys being
-            ;; overridden by the :out keys in the patch. All the others are
-            ;; ignored.
-            out (evaluate (:out m)
-                          (assoc config :env (merge (:env config)
-                                                    (:env report))))]
-        (assoc m :report report))
+        ;; Modules
+        (contains? m :module)
+        (let [config (assoc config :env (merge (:env config)
+                                               (evaluate (:in m) config)))
+              module (if (string? (:module m))
+                       (resolve-module
+                         (:data-connector config)
+                         (evaluate (:module m) config))
+                       (:module m))
+              ;; Run the module. Each module returns a report with a new env
+              ;; based on what it requires/provides, and a list of return values
+              ;; for each checkpoint.
+              report (run-module module (assoc-flags config m))
+              ;; The new env is made up of the old env, with any keys being
+              ;; overridden by the :out keys in the patch. All the others are
+              ;; ignored.
+              out (evaluate (:out m)
+                            (assoc config :env (merge (:env config)
+                                                      (:env report))))]
+          (assoc m :report report))
 
-      ;; All other maps
-      :else
-      (into (empty m)
-        (map (fn [[k v]]
-               (if (= k :assert)
-                 [k v]
-                 [(evaluate k config) (evaluate v config)]))
-             m)))
+        ;; All other maps
+        :else
+        (into (empty m)
+          (map (fn [[k v]]
+                 (if (= k :assert)
+                   [k v]
+                   [(evaluate k config) (evaluate v config)]))
+               m)))
 
-    ;; Other collections
-    (coll? m)
-    (reverse (into (empty m) (doall (map (fn [item] (evaluate item config)) m))))
-    
-    :else m))
+      ;; Other collections
+      (coll? m)
+      (reverse (into (empty m) (doall (map (fn [item] (evaluate item config)) m))))
+      
+      :else m)))
 
 
 (defn run-program
