@@ -2,7 +2,7 @@
 
 # __Flax__ #
 
-Flax is a framework for modeling and running distributed process pipeline scenarios that
+Flax is a domain specific language for modeling coordinated, distributed processes that
 require provisioning (potentially complex) systems and/or real integrations with external services in a production
 or production-like environment.
 
@@ -11,23 +11,14 @@ in YAML, which allows for easy source code generation from any
 language that can serialize map- or dictionary-like data structures into JSON (because YAML is a superset of JSON).
 
 ## Install
-Clone this repository and `cd` into it.
-With [Leiningen](http://leiningen.org) run:
+With [Leiningen](http://leiningen.org), add this to your project's `project.clj` file:
 
-    lein install
-
-Then add this to your project's `project.clj` file:
-
-    [flax "0.1.0-SNAPSHOT"]
+    [co.nclk/flax "0.1.0"]
 
 ## Getting started
 Flax follows the so-called Hollywood principle (i.e., "don't call us; we'll call you") to encourage modularity
 and decoupling. But Flax also emulates modular synthesis [patches](https://en.wikipedia.org/wiki/Synthesizer#Patch)
 from the domain of audio signal processing.
-
-> N.B., for the below example to actually run, you will need the
-[flax-file-connector](https://github.com/tjb1982/flax-file-connector) (discussed later)
-to `slurp` the programs and modules from their respective file paths.
 
 A Hello World in Flax would look something like this:
 
@@ -37,7 +28,7 @@ A Hello World in Flax would look something like this:
   
 (defn -main
   [& argv]
-  (let [articulation {:data-connector "flax-file-connector.core"
+  (let [articulation {:data-connector "co.nclk.flax.data"
                       :program "~/path/to/my/program.yaml"
                       :env {:FOO "World"}}]
     (System/exit (flax/run articulation))))
