@@ -229,7 +229,7 @@
           (= (name (:name node)) "local"))
       "local"
 
-      :else (str "flax-" (name (:name node)) "-" (.getTime (:effective self)) "-" (:version self))))
+      :else (str (name (:name node)) "-" (.getTime (:effective self)) "-" (:version self))))
   (isolate [self] self))
 
 
