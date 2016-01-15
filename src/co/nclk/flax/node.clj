@@ -26,8 +26,8 @@
 
 
 (defn node-log-str
-  [node-name runid & more]
-  (str "[" node-name ": " runid "] " (apply str more)))
+  [node-name ip runid & more]
+  (str "[" node-name (if ip (str " (" ip ")") "") ": " runid "] " (apply str more)))
 
 
 (defn node-error
@@ -52,12 +52,12 @@
 
 
 (defn log-result
-  [out err exit node-name runid]
+  [out err exit node-name ip runid]
   (when-not (clojure.string/blank? out)
-    (log :debug (node-log-str node-name runid "stdout: " (clojure.string/trim out))))
+    (log :debug (node-log-str node-name ip runid "stdout: " (clojure.string/trim out))))
   (when-not (clojure.string/blank? err)
     (log :debug
-      (node-log-str node-name runid "stderr: " (clojure.string/trim err)))))
+      (node-log-str node-name ip runid "stderr: " (clojure.string/trim err)))))
 
 
 (defn- invoke-local
@@ -77,9 +77,9 @@
 
         (when *log*
           (when (:display checkpoint)
-            (log :info (node-log-str "local" (:runid checkpoint) (clojure.string/trim (:display checkpoint)))))
-          (log :debug (node-log-str "local" (:runid checkpoint) (clojure.string/join " " argv)))
-          (log :debug (node-log-str "local" (:runid checkpoint) "Contents of " tmpfile-name ":\n" (:invocation checkpoint))))
+            (log :info (node-log-str "local" nil (:runid checkpoint) (clojure.string/trim (:display checkpoint)))))
+          (log :debug (node-log-str "local" nil (:runid checkpoint) (clojure.string/join " " argv)))
+          (log :debug (node-log-str "local" nil (:runid checkpoint) "Contents of " tmpfile-name ":\n" (:invocation checkpoint))))
 
         (let [[out err]
               (for [stream [stdout stderr]]
@@ -89,7 +89,7 @@
                       (if (nil? line)
                         lines
                         (do
-                          (log :debug (node-log-str "local" (:runid checkpoint) line))
+                          (log :debug (node-log-str "local" nil (:runid checkpoint) line))
                           (recur (conj lines line))))))))]
 
           (let [exit (.waitFor proc)
@@ -101,7 +101,7 @@
                                   :exit {:keys (:exit checkpoint) :value exit})]
             (clojure.java.io/delete-file tmpfile-name)
             (when-not (zero? exit)
-              (log-result nil nil exit "local" (:runid checkpoint)))
+              (log-result nil nil exit "local" nil (:runid checkpoint)))
             result))))))
 
 
@@ -130,18 +130,25 @@
                          (when (and *log*
                                     (not (clojure.string/blank? (:display checkpoint))))
                            (log :info
-                             (node-log-str (:name @node) (:runid checkpoint) (clojure.string/trim (:display checkpoint)))))
+                             (node-log-str (:short-name @node)
+                                           (:public_ip @node)
+                                           (:runid checkpoint)
+                                           (clojure.string/trim (:display checkpoint)))))
 
                          (ssh/with-connection session
                            (when *log*
-                             (log :debug (node-log-str (:name @node) (:runid checkpoint) (clojure.string/trim (:invocation checkpoint)))))
+                             (log :debug (node-log-str (:short-name @node)
+                                                       (:public_ip @node)
+                                                       (:runid checkpoint)
+                                                       (clojure.string/trim (:invocation checkpoint)))))
                            (let [result (ssh/ssh session {:cmd (str "sudo su " (or (:user checkpoint) "root") " - ")
                                                           :in (:invocation checkpoint)})]
                              (when *log*
                                (log-result (:out result)
                                            (:err result)
                                            (:exit result)
-                                           (:name @node)
+                                           (:short-name @node)
+                                           (:public_ip @node)
                                            (:runid checkpoint)))
 
                              (assoc checkpoint :out {:keys (:out checkpoint)
@@ -153,7 +160,8 @@
                              ))
                        (catch Exception se
                          (log :error
-                           (node-log-str (:name @node)
+                           (node-log-str (:short-name @node)
+                                         (:public_ip @node)
                                          (:runid checkpoint)
                                          (.getMessage se)
                                          ". "
@@ -164,6 +172,17 @@
               (recur (dec remaining-attempts))))))
               )))
 
+(defn short-name
+  [node]
+  (cond
+    (string? node)
+    node
+
+    (or (nil? (:name node))
+        (= (name (:name node)) "local"))
+    "local"
+
+    :else (:name node)))
 
 (defrecord NodeManager [nodes effective version context]
   PNodeManager
@@ -180,21 +199,19 @@
           (-> @nodes (get (full-node-name self node)))
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)
-                node (-> (ctor context) (create node (full-node-name self node)))
+                n (-> (ctor context) (create node (full-node-name self node)))
                 agent (ssh/ssh-agent {})]
-            (ssh/add-identity agent {:name (:name @(:data @node)) :private-key (-> @(:data @node) :private-key)})
-            (swap! (:data @node) #(assoc % :ssh-agent agent))
+            (ssh/add-identity agent {:name (:name @(:data @n)) :private-key (-> @(:data @n) :private-key)})
+            (swap! (:data @n) #(assoc % :ssh-agent agent
+                                        :short-name (short-name node)))
             ;; The `node` returned from the constructor is a promise.
             ;; The new node record has some `:data` with a `:name` entry
             ;; which is the full node name. We add the node to the manager's
             ;; nodes with this full name as the key.
-            (swap! nodes #(assoc % (-> @(:data @node) :name)
-                                   @node))
-            @node))))
+            (swap! nodes #(assoc % (-> @(:data @n) :name)
+                                   @n))
+            @n))))
   (invoke [self checkpoint node]
-    (assoc checkpoint :out {:keys (:out checkpoint)}
-                      :err {:keys (:err checkpoint)}
-                      :exit {:keys (:exit checkpoint) :value 0})
     (let [ts (java.util.Date.)]
       (assoc (if (= "local" (full-node-name self node))
                (invoke-local checkpoint)

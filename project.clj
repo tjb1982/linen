@@ -1,4 +1,4 @@
-(defproject co.nclk/flax "0.1.2"
+(defproject co.nclk/flax "0.1.3"
   :description "Implementation of an interpreter for flax, a domain specific language for modeling coordinated, distributed processes."
   :url "https://github.com/tjb1982/flax"
   :license {:name "Eclipse Public License"
