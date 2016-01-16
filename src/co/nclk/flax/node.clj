@@ -197,6 +197,9 @@
       (map? node)
       (or ;; If a node already exists with the node name, just return it.
           (-> @nodes (get (full-node-name self node)))
+          (and (nil? (-> node :connector))
+               (do (log :warn (format "flax: connector not found for node: %s. Using \"local\" instead." (:name node)))
+                   (-> @nodes (get "local"))))
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)
                 n (-> (ctor context) (create node (full-node-name self node)))
@@ -215,7 +218,10 @@
     (let [ts (java.util.Date.)]
       (assoc (if (= "local" (full-node-name self node))
                (invoke-local checkpoint)
-               (invoke-remote checkpoint (get-node self node)))
+               (let [node (get-node self node)]
+                 (if (= "local" (-> @(:data node) :name))
+                   (invoke-local checkpoint)
+                   (invoke-remote checkpoint node))))
              :started (.getTime ts)
              :finished (.getTime (java.util.Date.))))
     )
