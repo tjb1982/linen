@@ -219,7 +219,7 @@
       (assoc (if (= "local" (full-node-name self node))
                (invoke-local checkpoint)
                (let [node (get-node self node)]
-                 (if (= "local" (-> @(:data node) :name))
+                 (if (nil? (:data node))
                    (invoke-local checkpoint)
                    (invoke-remote checkpoint node))))
              :started (.getTime ts)
