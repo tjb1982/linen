@@ -225,7 +225,7 @@
       (string? node)
       node
 
-      (or (nil? (:name node))
+      (or (clojure.string/blank? (:name node))
           (= (name (:name node)) "local"))
       "local"
 
