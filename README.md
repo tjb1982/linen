@@ -60,16 +60,64 @@ to run interpreted languages in a module:
 checkpoints:
 - - invocation: |
       #!/usr/bin/env python2
-      print "Hello World"
+      from __future__ import print_function
+      import sys
+      print("Hello Python", file=sys.stderr)
 ```
 
 ```yaml
 checkpoints:
 - - invocation: |
     #!/usr/bin/env tclsh
-    puts {hello, world}
+    puts {Hello Tcl}
 ```
 
+Also very easy is mixing and matching interpreters in the same module:
+
+```yaml
+checkpoints:
+- - invocation: |
+      #!/usr/bin/env php
+      <?php echo "Hello "."PHP";
+  - invocation: |
+      #!/usr/bin/env dart
+      void main() {
+          print('Hello Dart');
+      }
+```
+
+In this case, both of these invocations will be run concurrently. If you run it like this, the first process will return
+before the second process starts.
+
+```yaml
+checkpoints:
+- - invocation: |
+      #!/usr/bin/env php
+      <?php echo "Hello "."PHP";
+- - invocation: |
+      #!/usr/bin/env dart
+      void main() {
+          print('Hello Dart');
+      }
+```
+
+This makes it really easy to manage concurrency in modules:
+
+```yaml
+checkpoints:
+- - invocation: |
+      sleep 2
+      echo "Two" >> /tmp/test
+  - invocation: echo "One" >> /tmp/test
+- - invocation: echo "Three" >> /tmp/test
+```
+```bash
+$ cat /tmp/test
+One
+Two
+Three
+
+```
 ## What is it?
 This documentation is a work in progress. If you didn't find the above description very satisfying, you might find a more satisfying exposition
 [here](https://youtu.be/ZG_k5CSYKhg?t=158) for now.
