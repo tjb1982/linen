@@ -87,7 +87,7 @@ checkpoints:
 ```
 
 In this case, both of these invocations will be run concurrently. If you run it like the above, the first process may return
-before the second process returns.
+before the second process returns. In the next example, each process happens in sequence:
 
 ```yaml
 checkpoints:
@@ -101,7 +101,7 @@ checkpoints:
       }
 ```
 
-Notice the extra `-`. Running it like that instead makes sure the first process exits before the second process can start.
+Notice the extra `-`. Running it like this instead makes sure the first process exits before the second process can start.
 This makes it really easy to manage concurrency in modules:
 
 ```yaml
