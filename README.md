@@ -3,7 +3,7 @@
 # __Flax__ #
 
 Flax is a domain specific language for modeling coordinated, distributed processes. It was designed to help with 
-situations that require provisioning (potentially complex) systems and/or real integrations with external services 
+situations that require provisioning and interacting with (potentially complex) systems and/or real integrations with external services 
 in a production or production-like environment. It's similar to Ansible, but designed to provide more low-level transparency
 and polyglot friendliness. I.e., for Flax, expressiveness is a higher priority than simplicity, and flexibility a higher priority
 than a low barrier to entry and/or user-friendliness.
