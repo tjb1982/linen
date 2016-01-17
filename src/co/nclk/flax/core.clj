@@ -539,7 +539,7 @@
 
 (defn run
   [config]
-  (log :info ascii-art)
+  ;(log :info ascii-art)
   ;; Google "clojure stencil" (for the stencil library) for help finding
   ;; what these options can be. It's not particularly easy. -- tjb
   (swap! parser-options #(merge % (or (:parser-options config) {})))
