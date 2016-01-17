@@ -52,7 +52,23 @@ program:
       - - invocation: echo Hello World
 ```
 
-The above is a minimal configuration required to run a Flax program.
+The above is a minimal configuration required to run a Flax program. The `:invocation` is appended to a temporary file, which is made executable, and 
+run by the local operating system (on my system, the default interpreter is bash). That means it's very easy to use interpreter directives 
+to run interpreted languages in a module:
+
+```yaml
+checkpoints:
+- - invocation: |
+      #!/usr/bin/env python2
+      print "Hello World"
+```
+
+```yaml
+checkpoints:
+- - invocation: |
+    #!/usr/bin/env tclsh
+    puts {hello, world}
+```
 
 ## What is it?
 This documentation is a work in progress. If you didn't find the above description very satisfying, you might find a more satisfying exposition
