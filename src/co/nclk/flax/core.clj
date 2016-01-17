@@ -95,7 +95,9 @@
 
 (defn assoc-flags
   [c m]
-  (merge c (select-keys m [:throw :skip :log])))
+  (if (map? m)
+    (merge c (select-keys m [:throw :skip :log :assert]))
+    c))
 
 
 (defn do-groups
@@ -290,7 +292,7 @@
     :else reports))
 
 
-(defn returns
+(defn checkpoints
   [m & [rets]]
   (cond
     (map? m)
@@ -300,13 +302,13 @@
         rets r)
       (reduce
         (fn [rets [k v]]
-          (returns v rets))
+          (checkpoints v rets))
         rets m))
 
     (coll? m)
     (reduce
       (fn [rets x]
-        (returns x rets))
+        (checkpoints x rets))
       rets m)
 
     :else rets))
@@ -482,12 +484,14 @@
   [config]
   ;; A program's main is a collection of one or more entry point groups
   ;; that are kicked off concurrently.
-  (let [program (try
-                  (resolve-program (:data-connector config) (evaluate (:program config) config))
-                  (catch Exception e
-                    (die
-                      "The configuration must have a program property, which must be a path to a valid yaml document:"
-                      (.getMessage e))))
+  (let [program (if (map? (:program config))
+                  (:program config)
+                  (try
+                    (resolve-program (:data-connector config) (evaluate (:program config) config))
+                    (catch Exception e
+                      (die
+                        "The configuration must have a program property, which must resolve to a valid yaml document:"
+                        (.getMessage e)))))
         config (assoc config :env (evaluate (:env config) config))
         exit (try
                (when-let [main (:main program)]
@@ -543,7 +547,7 @@
     ;; Dynamically require the namespace containing the data-connector
     ;; and call its constructor; if no data-connector is specified, then
     ;; use the built-in FileDataConnector.
-    (let [config (evaluate config config)
+    (let [config (assoc (evaluate (dissoc config :program) config) :program (:program config))
           data-connector (if (:data-connector config)
                            (let [dc-ctor (do (-> config :data-connector symbol require)
                                              (-> config :data-connector (str "/connector") symbol resolve))]
@@ -571,53 +575,19 @@
                                             ;; continued support for file based configuration, too.
                                             :data-connector data-connector))]
 
-      ;; `return` is a fully evaluated data structure based on the data
-      ;; structure of the program.
-
-      ;; First make sure that target/logs exists
-      (clojure.java.io/make-parents "target/logs/foo")
-
-      ;; Write the raw return value of the entire program to the
-      ;; logs directory.
-      (log :info "Creating target/logs/raw.json")
-      (spit "target/logs/raw.json" (json/generate-string return))
-
-      (log :info "Creating target/logs/env.json")
-      (spit "target/logs/env.json" (json/generate-string (evaluate (:env config) config)))
-
-      (log :info "Creating target/logs/harvest.json")
-      ;; Write any harvested values to the logs directory.
-      (spit "target/logs/harvest.json"
-            (json/generate-string
-              (reduce
-                (fn [harvested rset]
-                  (merge harvested rset))
-                {}
-                (map (fn [hkey]
-                       {(keyword hkey) (harvest return config hkey [])})
-                     (-> config :harvest)))))
-
-      (log :info "Collecting failures")
-      ;; Write the failing returns to the logs directory and exit with
-      ;; the count of the failures.
-      (let [checkpoints (returns return)
-            failures (->> checkpoints
-                          (filter #(-> % :success :value false?)))
-            num-failures (count failures)]
-
-        (log :info "Creating target/logs/checkpoints.json")
-        (spit "target/logs/checkpoints.json" (json/generate-string checkpoints))
-        (log :info "Creating target/logs/failures.json")
-        (spit "target/logs/failures.json" (json/generate-string failures))
-        (log :info (str "Failures: " num-failures))
-        (log :info (str "Seed: " (.getTime effective)))
-
-        ;; Allow time for agents to finish logging.
-        (Thread/sleep 1000)
-        ;; Kill the agents so the program exits without further delay.
-        (shutdown-agents)
-
-        num-failures))
+      (let [checkpoints (checkpoints return)]
+        (assoc {:raw return
+                :env (evaluate (:env config) config)
+                :harvest (reduce
+                           (fn [harvested rset]
+                             (merge harvested rset))
+                           {}
+                           (map (fn [hkey]
+                                  {(keyword hkey) (harvest return config hkey [])})
+                                (-> config :harvest)))}
+          :checkpoints checkpoints
+          :failures (->> checkpoints
+                         (filter #(-> % :success :value false?))))))
     (catch java.io.FileNotFoundException fnfe
       (die "Resource could not be found:" (.getMessage fnfe)))
     ))
@@ -625,3 +595,50 @@
 (defn -main [& argv]
   (run (yaml/parse-string (slurp (first argv)))))
 
+;;      ;; `return` is a fully evaluated data structure based on the data
+;;      ;; structure of the program.
+;;
+;;      ;; First make sure that target/logs exists
+;;      (clojure.java.io/make-parents "target/logs/foo")
+;;
+;;      ;; Write the raw return value of the entire program to the
+;;      ;; logs directory.
+;;      (log :info "Creating target/logs/raw.json")
+;;      (spit "target/logs/raw.json" (json/generate-string return))
+;;
+;;      (log :info "Creating target/logs/env.json")
+;;      (spit "target/logs/env.json" (json/generate-string (evaluate (:env config) config)))
+;;
+;;      (log :info "Creating target/logs/harvest.json")
+;;      ;; Write any harvested values to the logs directory.
+;;      (spit "target/logs/harvest.json"
+;;            (json/generate-string
+;;              (reduce
+;;                (fn [harvested rset]
+;;                  (merge harvested rset))
+;;                {}
+;;                (map (fn [hkey]
+;;                       {(keyword hkey) (harvest return config hkey [])})
+;;                     (-> config :harvest)))))
+;;
+;;      (log :info "Collecting failures")
+;;      ;; Write the failing returns to the logs directory and exit with
+;;      ;; the count of the failures.
+;;      (let [checkpoints (checkpoints return)
+;;            failures (->> checkpoints
+;;                          (filter #(-> % :success :value false?)))
+;;            num-failures (count failures)]
+;;
+;;        (log :info "Creating target/logs/checkpoints.json")
+;;        (spit "target/logs/checkpoints.json" (json/generate-string checkpoints))
+;;        (log :info "Creating target/logs/failures.json")
+;;        (spit "target/logs/failures.json" (json/generate-string failures))
+;;        (log :info (str "Failures: " num-failures))
+;;        (log :info (str "Seed: " (.getTime effective)))
+;;
+;;        ;; Allow time for agents to finish logging.
+;;        (Thread/sleep 1000)
+;;        ;; Kill the agents so the program exits without further delay.
+;;        (shutdown-agents)
+;;
+;;        num-failures)
