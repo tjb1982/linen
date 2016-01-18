@@ -38,7 +38,7 @@
 
 (deftest test-directive-entry-template-match
   (testing "Using :invocation entry in checkpoint with re-match"
-    (let [msg "Directives are cool"
+    (let [msg "Interpreter directives are cool"
           r (flax/run {:env {:msg msg}
                        :program {:main
                        [{:module {:checkpoints
@@ -73,54 +73,53 @@
       (-> r flax/returns first :err :value (= msg) is)
       )))
 
-;;(deftest test-concurrent-checkpoints
-;;  (testing "Concurrent checkpoints"
-;;    (let [fname (str (System/getProperty "user.dir") "/testconcurrent")]
-;;      (spit fname "")
-;;      (let [r (flax/run {:program
-;;                         {:main
-;;                          [{:module
-;;                            {:checkpoints
-;;                             [[{:source (str "sleep 0.1\necho Two >> " fname)}
-;;                               {:source (str "echo One >> " fname)}]
-;;                              [{:source (str "echo Three >> " fname)}]]}}]}})]
-;;        (-> r :raw nil? not is)
-;;        (println (-> r :checkpoints count))
-;;        (-> r :checkpoints count (= 3) is)
-;;        (-> r :failures count zero? is)
-;;        (-> fname slurp (= "One\nTwo\nThree\n") is)
-;;        (clojure.java.io/delete-file fname)
-;;        ))))
-;;
-;;(deftest test-evaluate-only
-;;  (testing "Using the `evaluate` function by itself"
-;;    (let [r (flax/evaluate {:module
-;;                            {:checkpoints
-;;                             [[{:assert
-;;                                {(keyword "~(fn")
-;;                                 [["out" "err" "exit"]
-;;                                  {(keyword "~(=") ["~@out" "Hello World"]}]}
-;;                                :source "echo Hello World"}]]}} {})]
-;;      (-> r :report :returns ffirst :success :value true? is)
-;;      (-> r :report :returns ffirst :exit :value zero? is)
-;;      (-> r :report :returns ffirst :out :value (= "Hello World") is)
-;;      (->> r :report :returns ffirst :runid (instance? java.util.UUID) is)
-;;      )))
-;;
-;;(deftest test-run-parameters
-;;  (testing "Run with parameters"
-;;    (let [text "lalala"
-;;          fname (str (System/getProperty "user.dir") "/testparams")
-;;          r (flax/run {:env {:TEXT text :FILENAME fname}
-;;                       :program
-;;                       {:main
-;;                        [{:module
-;;                          {:checkpoints
-;;                           [[{:source "#!/usr/bin/env python2\nwith open('~{FILENAME}', 'w') as f:\n    f.write('~{TEXT}')\n"}]]}}]}})]
-;;      (-> r :checkpoints first :success :value true? is)
-;;      (-> r :checkpoints first :out :value (= "") is)
-;;      (-> r :checkpoints first :exit :value zero? is)
-;;      (-> r :checkpoints first :err :value (= "") is)
-;;      (clojure.java.io/delete-file fname)
-;;      )))
-;;
+(deftest test-concurrent-checkpoints
+  (testing "Concurrent checkpoints"
+    (let [fname (str (System/getProperty "user.dir") "/testconcurrent")]
+      (spit fname "")
+      (let [r (flax/run {:program
+                         {:main
+                          [{:module
+                            {:checkpoints
+                             [[{:source (str "sleep 0.1\necho Two >> " fname)}
+                               {:source (str "echo One >> " fname)}]
+                              [{:source (str "echo Three >> " fname)}]]}}]}})]
+        (-> r nil? not is)
+        (-> r flax/returns count (= 3) is)
+        (->> r flax/returns (filter #(-> % :success :value true? not)) count zero? is)
+        (-> fname slurp (= "One\nTwo\nThree\n") is)
+        (clojure.java.io/delete-file fname)
+        ))))
+
+(deftest test-evaluate-only
+  (testing "Using the `evaluate` function by itself"
+    (let [r (flax/evaluate {:module
+                            {:checkpoints
+                             [[{:assert
+                                {(keyword "~(fn")
+                                 [["out" "err" "exit"]
+                                  {(keyword "~(=") ["~@out" "Hello World"]}]}
+                                :source "echo Hello World"}]]}} {})]
+      (-> r :returns ffirst :success :value true? is)
+      (-> r :returns ffirst :exit :value zero? is)
+      (-> r :returns ffirst :out :value (= "Hello World") is)
+      (->> r :returns ffirst :runid (instance? java.util.UUID) is)
+      )))
+
+(deftest test-run-parameters
+  (testing "Run with parameters"
+    (let [text "lalala"
+          fname (str (System/getProperty "user.dir") "/testparams")
+          r (flax/run {:env {:TEXT text :FILENAME fname}
+                       :program
+                       {:main
+                        [{:module
+                          {:checkpoints
+                           [[{:source "#!/usr/bin/env python2\nwith open('~{FILENAME}', 'w') as f:\n    f.write('~{TEXT}')\n"}]]}}]}})]
+      (-> r flax/returns first :success :value true? is)
+      (-> r flax/returns first :out :value (= "") is)
+      (-> r flax/returns first :exit :value zero? is)
+      (-> r flax/returns first :err :value (= "") is)
+      (clojure.java.io/delete-file fname)
+      )))
+

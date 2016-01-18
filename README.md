@@ -277,7 +277,7 @@ There are also special notations for keywords and symbols:
 - ~(or:
   - ~@some-associative-thing
   - { foo: bar, baz: quux }
-- ~:some-key
+- ~:foo
 ```
 
 ### Dependent modules
