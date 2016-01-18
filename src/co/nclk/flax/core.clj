@@ -168,7 +168,9 @@
             )))
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
-      (list (-> config :node-manager (invoke checkpoint :local) (assert-checkpoint config {}))))
+      (list (if-not (:node-manager config)
+              (-> (node-manager (or (:effective config) 0)) (invoke checkpoint :local) (assert-checkpoint config {}))
+              (-> config :node-manager (invoke checkpoint :local) (assert-checkpoint config {})))))
     ))
 
 
@@ -292,7 +294,7 @@
     :else reports))
 
 
-(defn checkpoints
+(defn returns
   [m & [rets]]
   (cond
     (map? m)
@@ -302,13 +304,13 @@
         rets r)
       (reduce
         (fn [rets [k v]]
-          (checkpoints v rets))
+          (returns v rets))
         rets m))
 
     (coll? m)
     (reduce
       (fn [rets x]
-        (checkpoints x rets))
+        (returns x rets))
       rets m)
 
     :else rets))
@@ -337,8 +339,8 @@
         (contains? m :resolve)
         (run-program (assoc config :program (str (:resolve m))))
 
-        ;; Contains :then
-        (contains? m :then)
+        ;; Contains :then or :dependents
+        (or (contains? m :then) (contains? m :dependents))
         ;; `dissoc` the :then entry and run it as if it didn't exist.
         ;; Then, extract the new environment from the result, and run the 
         ;; :then entry with that environment.
@@ -462,7 +464,8 @@
               out (evaluate (:out m)
                             (assoc config :env (merge (:env config)
                                                       (:env report))))]
-          (assoc m :report report))
+          ;(assoc m :report report))
+          (merge m report))
 
         ;; All other maps
         :else
@@ -547,7 +550,9 @@
     ;; Dynamically require the namespace containing the data-connector
     ;; and call its constructor; if no data-connector is specified, then
     ;; use the built-in FileDataConnector.
-    (let [config (assoc (evaluate (dissoc config :program) config) :program (:program config))
+    (let [config (assoc (evaluate (dissoc config :program) config)
+                        :program
+                        (:program config))
           data-connector (if (:data-connector config)
                            (let [dc-ctor (do (-> config :data-connector symbol require)
                                              (-> config :data-connector (str "/connector") symbol resolve))]
@@ -575,8 +580,9 @@
                                             ;; continued support for file based configuration, too.
                                             :data-connector data-connector))]
 
-      (let [checkpoints (checkpoints return)]
-        (assoc {:raw return
+      (let [checkpoints (returns return)]
+        return
+        #_(assoc {:raw return
                 :env (evaluate (:env config) config)
                 :harvest (reduce
                            (fn [harvested rset]
