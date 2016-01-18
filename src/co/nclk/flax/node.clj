@@ -64,10 +64,20 @@
   [checkpoint]
   (binding [*log* (not (false? (:log checkpoint)))]
     (let [tmpfile-name (str (System/getProperty "user.dir") "/.flax-temp-script-" (java.util.UUID/randomUUID))
-          argv (remove nil?
+          argv (remove clojure.string/blank?
                  (flatten
-                   [(if-let [u (:user checkpoint)] ["sudo" "-u" u]) tmpfile-name]))]
-      (spit tmpfile-name (:invocation checkpoint))
+                   [(if-let [u (:user checkpoint)] ["sudo" "-u" u])
+                    (if-let [d (:invocation checkpoint)]
+                      (clojure.string/split
+                        (if-let [t (:template d)]
+                          (if-not (clojure.string/blank? (:match d))
+                            (clojure.string/replace t (re-pattern (str (:match d))) tmpfile-name)
+                            (str t " " tmpfile-name))
+                          (str d " " tmpfile-name))
+                        #" ")
+                      tmpfile-name
+                      )]))]
+      (spit tmpfile-name (:source checkpoint))
       (-> (java.io.File. tmpfile-name) (.setExecutable true))
       (Thread/sleep 100)
       (let [proc (-> (Runtime/getRuntime)
@@ -79,7 +89,7 @@
           (when (:display checkpoint)
             (log :info (node-log-str "local" nil (:runid checkpoint) (clojure.string/trim (:display checkpoint)))))
           (log :debug (node-log-str "local" nil (:runid checkpoint) (clojure.string/join " " argv)))
-          (log :debug (node-log-str "local" nil (:runid checkpoint) "Contents of " tmpfile-name ":\n" (:invocation checkpoint))))
+          (log :debug (node-log-str "local" nil (:runid checkpoint) "Contents of " tmpfile-name ":\n" (:source checkpoint))))
 
         (let [[out err]
               (for [stream [stdout stderr]]
@@ -107,7 +117,7 @@
 
 (defn- invoke-remote
   [checkpoint node]
-  (if (:invocation checkpoint)
+  (if (:source checkpoint)
     (binding [*log* (not (false? (:log checkpoint)))]
       (let [node (:data node)
             agent (:ssh-agent @node)
@@ -140,9 +150,9 @@
                              (log :debug (node-log-str (:short-name @node)
                                                        (:public_ip @node)
                                                        (:runid checkpoint)
-                                                       (clojure.string/trim (:invocation checkpoint)))))
+                                                       (clojure.string/trim (:source checkpoint)))))
                            (let [result (ssh/ssh session {:cmd (str "sudo su " (or (:user checkpoint) "root") " - ")
-                                                          :in (:invocation checkpoint)})]
+                                                          :in (:source checkpoint)})]
                              (when *log*
                                (log-result (:out result)
                                            (:err result)
