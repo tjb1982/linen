@@ -123,3 +123,29 @@
       (clojure.java.io/delete-file fname)
       )))
 
+(deftest test-output-variable
+  (testing "Retrieving output variables"
+    (let [r (flax/run {:env {}
+                       :program {:main [
+                       {:out {:FOO "~@TEST"}
+                        :dependents [{:in {:LALA "~@FOO"}
+                                      :module {:requires [{:key "LALA"}] :checkpoints [[{:source "echo junebug ~{LALA}"}]]}}]
+                        :module
+                        {:provides [{:key "TEST"}]
+                         :checkpoints [
+                         [{:nodes [{:name "local" :out "TEST"}]
+                           :source "echo This is a test"}]]}}]}})]
+      (clojure.pprint/pprint r)
+      (-> r flax/returns second :out :value (= "junebug This is a test") is)
+      )))
+
+(deftest test-resolve-program
+  (testing "Resolving a program from a string using the data-connector"
+    (let [fname (str (System/getProperty "user.dir") "/test-program-resolve.yaml")]
+      (spit fname "main:\n- module:\n    checkpoints:\n    - - source: echo hello resolve")
+      (let [r (flax/run {:env {}
+                         :program {:main [
+                         {:resolve fname}]}})]
+        (clojure.java.io/delete-file fname)
+        (-> r flax/returns first :out :value (= "hello resolve") is)
+        ))))

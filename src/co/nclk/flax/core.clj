@@ -162,6 +162,7 @@
                                        (:exit %)]
                                 :success {:keys [(:success checkpoint)
                                                  (:success %)]}
+                                :proxy (:proxy %)
                                 :user (:user %))
               %)
             (assert-checkpoint config %)
@@ -255,10 +256,10 @@
   (cond
 
     (map? m)
-    (if-let [report (:report m)]
+    (if (contains? m :returns)
       (let [out (evaluate (:out m)
                           {:env (merge env
-                                       (-> m :report :env))})]
+                                       (-> m :env))})]
         (merge env out))
       (reduce
         (fn [env [k v]]
@@ -337,18 +338,20 @@
 
         ;; Contains :resolve
         (contains? m :resolve)
-        (run-program (assoc config :program (str (:resolve m))))
+        (-> config :data-connector (resolve-program (evaluate (:resolve m) config)) :main (evaluate config))
 
         ;; Contains :then or :dependents
-        (or (contains? m :then) (contains? m :dependents))
+        (contains? m :dependents)
         ;; `dissoc` the :then entry and run it as if it didn't exist.
         ;; Then, extract the new environment from the result, and run the 
         ;; :then entry with that environment.
-        (let [patch (evaluate (dissoc m :then) config)
+        (let [patch (evaluate (dissoc m :dependents) config)
               env (extract-env patch (:env config))]
-          (concat [patch]
-                  (doall (pmap #(evaluate % (assoc config :env env))
-                               (:then m)))))
+          ;(assoc patch
+          ;       :dependents
+          (conj [patch]
+                 (doall (pmap #(evaluate % (assoc config :env env))
+                              (:dependents m)))))
 
         ;; Functions and special forms
         (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
@@ -566,7 +569,7 @@
                                           (-> (java.util.Date.) .getTime)))]
                       (log :info (str "Seed: " (.getTime effective)))
                       effective)
-          return (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
+          result (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
                                             ;; as a seed for any pseudorandom number generation, so that
                                             ;; randomized testing can be retested as deterministically
                                             ;; as possible.
@@ -579,21 +582,9 @@
                                             ;; database persistence should be supported, with
                                             ;; continued support for file based configuration, too.
                                             :data-connector data-connector))]
-
-      (let [checkpoints (returns return)]
-        return
-        #_(assoc {:raw return
-                :env (evaluate (:env config) config)
-                :harvest (reduce
-                           (fn [harvested rset]
-                             (merge harvested rset))
-                           {}
-                           (map (fn [hkey]
-                                  {(keyword hkey) (harvest return config hkey [])})
-                                (-> config :harvest)))}
-          :checkpoints checkpoints
-          :failures (->> checkpoints
-                         (filter #(-> % :success :value false?))))))
+      (log :info (str "Seed: " (.getTime effective)))
+      result)
+    
     (catch java.io.FileNotFoundException fnfe
       (die "Resource could not be found:" (.getMessage fnfe)))
     ))
@@ -601,50 +592,4 @@
 (defn -main [& argv]
   (run (yaml/parse-string (slurp (first argv)))))
 
-;;      ;; `return` is a fully evaluated data structure based on the data
-;;      ;; structure of the program.
-;;
-;;      ;; First make sure that target/logs exists
-;;      (clojure.java.io/make-parents "target/logs/foo")
-;;
-;;      ;; Write the raw return value of the entire program to the
-;;      ;; logs directory.
-;;      (log :info "Creating target/logs/raw.json")
-;;      (spit "target/logs/raw.json" (json/generate-string return))
-;;
-;;      (log :info "Creating target/logs/env.json")
-;;      (spit "target/logs/env.json" (json/generate-string (evaluate (:env config) config)))
-;;
-;;      (log :info "Creating target/logs/harvest.json")
-;;      ;; Write any harvested values to the logs directory.
-;;      (spit "target/logs/harvest.json"
-;;            (json/generate-string
-;;              (reduce
-;;                (fn [harvested rset]
-;;                  (merge harvested rset))
-;;                {}
-;;                (map (fn [hkey]
-;;                       {(keyword hkey) (harvest return config hkey [])})
-;;                     (-> config :harvest)))))
-;;
-;;      (log :info "Collecting failures")
-;;      ;; Write the failing returns to the logs directory and exit with
-;;      ;; the count of the failures.
-;;      (let [checkpoints (checkpoints return)
-;;            failures (->> checkpoints
-;;                          (filter #(-> % :success :value false?)))
-;;            num-failures (count failures)]
-;;
-;;        (log :info "Creating target/logs/checkpoints.json")
-;;        (spit "target/logs/checkpoints.json" (json/generate-string checkpoints))
-;;        (log :info "Creating target/logs/failures.json")
-;;        (spit "target/logs/failures.json" (json/generate-string failures))
-;;        (log :info (str "Failures: " num-failures))
-;;        (log :info (str "Seed: " (.getTime effective)))
-;;
-;;        ;; Allow time for agents to finish logging.
-;;        (Thread/sleep 1000)
-;;        ;; Kill the agents so the program exits without further delay.
-;;        (shutdown-agents)
-;;
-;;        num-failures)
+
