@@ -3,8 +3,8 @@ main:
     checkpoints:
         groups:
         - - display: foo
-            invocation: |
+            source: |
               sleep 2
               echo "foo"
         - - display: bar
-            invocation: echo "bar"
+            source: echo "bar"
