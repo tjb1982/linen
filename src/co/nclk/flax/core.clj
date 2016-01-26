@@ -212,7 +212,7 @@
               config (assoc c :env (merge (evaluate defaults c)
                                           (:env c)))
               returns (do-groups run-checkpoint
-                        checkpoints
+                        (evaluate checkpoints config)
                         (assoc-flags config checkpoints))]
           ;; `returns` is a list of returns.
           ;; A return is a list of done checkpoints, one for each node it was run on.
@@ -338,7 +338,10 @@
 
         ;; Contains :resolve
         (contains? m :resolve)
-        (-> config :data-connector (resolve-program (evaluate (:resolve m) config)) :main (evaluate config))
+        (-> config :data-connector
+          (resolve-program (evaluate (:resolve m) config))
+          :main
+          (evaluate config))
 
         ;; Contains :then or :dependents
         (contains? m :dependents)
@@ -481,7 +484,8 @@
 
       ;; Other collections
       (coll? m)
-      (reverse (into (empty m) (doall (map (fn [item] (evaluate item config)) m))))
+      ((if (seq? m) reverse identity)
+        (into (empty m) (doall (map (fn [item] (evaluate item config)) m))))
       
       :else m)))
 
