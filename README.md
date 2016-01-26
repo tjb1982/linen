@@ -13,7 +13,7 @@ Because Flax is a library, it doesn't come with a command-line interface, but it
 
 Within a [Leiningen](http://leiningen.org) project, add this to your `project.clj` file:
 
-    [co.nclk/flax "0.1.8"]
+    [co.nclk/flax "1.2.0-SNAPSHOT"]
 
 
 > _N.B., the best place to look for the current version is the top of the `project.clj` file._
