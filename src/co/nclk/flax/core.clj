@@ -343,18 +343,18 @@
           :main
           (evaluate config))
 
-        ;; Contains :then or :dependents
-        (contains? m :dependents)
+        ;; Contains :children
+        (contains? m :children)
         ;; `dissoc` the :then entry and run it as if it didn't exist.
         ;; Then, extract the new environment from the result, and run the 
         ;; :then entry with that environment.
-        (let [patch (evaluate (dissoc m :dependents) config)
+        (let [patch (evaluate (dissoc m :children) config)
               env (extract-env patch (:env config))]
           ;(assoc patch
           ;       :dependents
           (conj [patch]
                  (doall (pmap #(evaluate % (assoc config :env env))
-                              (:dependents m)))))
+                              (:children m)))))
 
         ;; Functions and special forms
         (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
@@ -429,7 +429,7 @@
                     false
                     (recur (drop 1 args) yield)))))
 
-            'parallelize
+            'parallel
             (upmap #(evaluate % config)
               (-> fun-entry val))
 
@@ -557,10 +557,7 @@
     ;; Dynamically require the namespace containing the data-connector
     ;; and call its constructor; if no data-connector is specified, then
     ;; use the built-in FileDataConnector.
-    (let [config (assoc (evaluate (dissoc config :program) config)
-                        :program
-                        (:program config))
-          data-connector (if (:data-connector config)
+    (let [data-connector (if (:data-connector config)
                            (let [dc-ctor (do (-> config :data-connector symbol require)
                                              (-> config :data-connector (str "/connector") symbol resolve))]
                              (if-not dc-ctor

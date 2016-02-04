@@ -67,19 +67,19 @@
     (let [tmpfile-name (str (System/getProperty "user.dir") "/.flax-temp-script-" (java.util.UUID/randomUUID))
           proxy? (not (nil? argv))
           argv (or argv
-                 (remove clojure.string/blank?
-                   (flatten
-                     [(if-let [u (:user checkpoint)] ["sudo" "-u" u])
-                      (if-let [d (:invocation checkpoint)]
-                        (clojure.string/split
-                          (if-let [t (:template d)]
-                            (if-not (clojure.string/blank? (:match d))
-                              (clojure.string/replace t (re-pattern (str (:match d))) tmpfile-name)
-                              (str t " " tmpfile-name))
-                            (str d " " tmpfile-name))
-                          #" ")
-                        tmpfile-name
-                        )])))]
+                   (remove clojure.string/blank?
+                     (flatten
+                       [(if-let [u (:user checkpoint)] ["sudo" "-u" u])
+                        (if-let [d (:invocation checkpoint)]
+                          (clojure.string/split
+                            (if-let [t (:template d)]
+                              (if-not (clojure.string/blank? (:match d))
+                                (clojure.string/replace t (re-pattern (str (:match d))) tmpfile-name)
+                                (str t " " tmpfile-name))
+                              (str d " " tmpfile-name))
+                            #" ")
+                          tmpfile-name
+                          )])))]
       (when-not proxy?
         (spit tmpfile-name (:source checkpoint))
         (-> (java.io.File. tmpfile-name) (.setExecutable true))
