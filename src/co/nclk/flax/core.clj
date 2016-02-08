@@ -506,7 +506,7 @@
         exit (try
                (when-let [main (:main program)]
                  (doall (pmap #(evaluate % config) main)))
-               #_(catch java.util.concurrent.ExecutionException ae
+               (catch java.util.concurrent.ExecutionException ae
                  (loop [cause ae]
                    (if (nil? cause)
                      (throw ae)
