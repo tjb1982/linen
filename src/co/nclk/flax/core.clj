@@ -129,7 +129,8 @@
       (log :error (str "[" (:runid resolved) "] Failed."))) 
     (if (and (not (true? success))
              (or (:throw node) (:throw resolved)))
-      (throw (AssertionError. (assoc-in resolved [:success :value] false)))
+      ;;(throw (AssertionError. (assoc-in resolved [:success :value] false)))
+      (assoc-in resolved [:success :value] false)
       (assoc-in resolved [:success :value] success))))
 
 
