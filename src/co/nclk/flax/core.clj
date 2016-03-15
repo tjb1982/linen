@@ -260,15 +260,12 @@
     (if (contains? m :returns)
       (let [out (evaluate (:out m)
                           {:env (merge env
-                                       (-> m :env)
-                                       (reduce
-                                               (fn [env [k v]]
-                                                 (merge env (extract-env v env)))
-                                               env m)
-                                       )})]
-
+                                       (-> m :env))})]
         (merge env out))
-      )
+        (reduce
+          (fn [env [k v]]
+            (merge env (extract-env v env)))
+          env m))
 
     (coll? m)
     (reduce
@@ -363,7 +360,13 @@
         ;; Functions and special forms
         (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
         (let [fun-entry (->> m (filter #(-> % key str (subs 1) (.startsWith "~("))) first)
-              fun (-> fun-entry key str (subs 3) symbol)]
+              fun (-> fun-entry key str (subs 3) symbol)
+              do-statements (fn [statements env]
+                              (loop [statements statements last-ret nil]
+                                (if (empty? statements)
+                                  last-ret
+                                  (let [ret (evaluate (first statements) (assoc config :env env))]
+                                    (recur (drop 1 statements) ret)))))]
           (condp = fun
             ;; Special forms
             'if
@@ -372,6 +375,22 @@
                  second #(nth % 2 nil))
                 (-> fun-entry val))
               config)
+
+            'let
+            (let [bindings (-> fun-entry val first)]
+              (if-not (even? (count bindings))
+                (throw (IllegalArgumentException. "`let` requires an even number of bindings"))
+                (let [bindings (-> fun-entry val first)
+                      statements (->> fun-entry val (drop 1))
+                      env (loop [bindings bindings
+                                 env (:env config)]
+                            (if (empty? bindings)
+                              env
+                              (recur (drop 2 bindings)
+                                     (merge env
+                                            {(evaluate (keyword (first bindings)) config)
+                                             (evaluate (second bindings) config)}))))]
+                  (do-statements statements env))))
 
             'fn
             (fn [& argv]
@@ -388,11 +407,7 @@
                               (recur (drop 1 args)
                                      (drop 1 argv)
                                      env))))]
-                (loop [statements statements last-ret nil]
-                  (if (empty? statements)
-                    last-ret
-                    (let [ret (evaluate (first statements) (assoc config :env env))]
-                      (recur (drop 1 statements) ret)))))) 
+                (do-statements statements env)))
 
             (symbol "#")
             (fn [& argv]
@@ -401,11 +416,7 @@
                                  (map-indexed
                                    (fn [idx item] [(keyword (str idx)) (evaluate item config)])
                                    argv)))]
-                (loop [statements (-> fun-entry val) last-ret nil]
-                  (if (empty? statements)
-                    last-ret
-                    (let [ret (evaluate (first statements) (assoc config :env env))]
-                      (recur (drop 1 statements) ret))))))
+                (do-statements (-> fun-entry val) env)))
 
             'for
             (let [coll (-> fun-entry val first second (evaluate config))]

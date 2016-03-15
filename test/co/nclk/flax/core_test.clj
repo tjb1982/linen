@@ -1,6 +1,6 @@
 (ns co.nclk.flax.core-test
   (:require [clojure.test :refer :all]
-            ;[clj-yaml.core :as yaml]
+            [clj-yaml.core :as yaml]
             [co.nclk.flax.node :refer [node-manager]]
             [co.nclk.flax.core :as flax]))
 
@@ -90,6 +90,45 @@
         (-> fname slurp (= "One\nTwo\nThree\n") is)
         (clojure.java.io/delete-file fname)
         ))))
+
+(deftest test-depth-first-extract-env
+  (testing "Depth-first extract-env"
+    (let [r (flax/run (yaml/parse-string "
+               program:
+                 main:
+                 - ~(map:
+                   - ~(#:
+                     - module:
+                         provides:
+                         - key: FOO
+                         checkpoints:
+                         - - source: echo lalala
+                             nodes:
+                             - out: FOO
+                       out:
+                         FOOS:
+                             ~(conj: [ ~@FOOS, ~@FOO ]
+                       children:
+                       - module:
+                           checkpoints:
+                           - - source: echo ~{#FOOS}~{.}~{/FOOS}
+                   - ~(range: [ 0, 3 ]
+                   out:
+                     ONE_FOO:
+                       ~(take: [ 1, ~@FOOS ]
+                   children:
+                   - ~(let:
+                     - - ONE_FOO
+                       - ~(first: [ ~@FOOS ]
+                     - module:
+                         checkpoints:
+                         - - source: echo ~{{ONE_FOO}} then ~{#FOOS}~{.}~{/FOOS}
+               
+               "))]
+      (-> r nil? not is)
+      (-> r flax/returns count (> 1) is)
+      (->> r flax/returns (filter #(-> % :success :value true? not)) count zero? is)
+      )))
 
 (deftest test-evaluate-only
   (testing "Using the `evaluate` function by itself"
