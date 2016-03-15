@@ -94,7 +94,7 @@
           (when (:display checkpoint)
             (log :info (node-log-str "local" nil (:runid checkpoint) (clojure.string/trim (:display checkpoint)))))
           (log :debug (node-log-str "local" nil (:runid checkpoint) (clojure.string/join " " argv)))
-          (log :debug (node-log-str "local" nil (:runid checkpoint) "Contents of " tmpfile-name ":\n" (:source checkpoint))))
+          (when-not proxy? (log :debug (node-log-str "local" nil (:runid checkpoint) "Contents of " tmpfile-name ":\n" (:source checkpoint)))))
 
         (let [[out err]
               (for [stream [stdout stderr]]

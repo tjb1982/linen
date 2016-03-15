@@ -260,12 +260,15 @@
     (if (contains? m :returns)
       (let [out (evaluate (:out m)
                           {:env (merge env
-                                       (-> m :env))})]
+                                       (-> m :env)
+                                       (reduce
+                                               (fn [env [k v]]
+                                                 (merge env (extract-env v env)))
+                                               env m)
+                                       )})]
+
         (merge env out))
-      (reduce
-        (fn [env [k v]]
-          (merge env (extract-env v env)))
-        env m))
+      )
 
     (coll? m)
     (reduce
