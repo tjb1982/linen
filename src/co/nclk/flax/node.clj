@@ -152,12 +152,18 @@
                                              (:runid checkpoint)
                                              (clojure.string/trim (:display checkpoint)))))
 
-                           (ssh/with-connection session
+                           (try
+
+                             (when-not (ssh/connected? session)
+                               (ssh/connect session
+                                            (or (-> @node :options :timeout) (* 60 1000))))
+
                              (when *log*
                                (log :debug (node-log-str (:short-name @node)
                                                          (:public_ip @node)
                                                          (:runid checkpoint)
                                                          (clojure.string/trim (:source checkpoint)))))
+
                              (let [result (ssh/ssh session {:cmd (str "sudo su " (or (:user checkpoint) "root") " - ")
                                                             :in (:source checkpoint)})]
                                (when *log*
@@ -174,7 +180,8 @@
                                                        :value (:err result)}
                                                  :exit {:keys (:exit checkpoint)
                                                         :value (:exit result)}))
-                               ))
+
+                             (finally (ssh/disconnect session))))
                          (catch Exception se
                            (log :error
                              (node-log-str (:short-name @node)
