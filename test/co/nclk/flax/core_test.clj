@@ -16,7 +16,35 @@
       (-> r flax/returns count (= 1) is)
       (->> r flax/returns (filter #(-> % :success :value true? not)) count zero? is)
       (clojure.pprint/pprint r)
-      )))
+      ))
+  (testing "Swap functionality"
+     (let [r (flax/run (yaml/parse-string
+"
+env:
+  foo:
+    bar:
+      baz: quux
+  one:
+  - 2
+  - three:
+    - 4
+program:
+  main:
+  - - ~(log:
+      - ~:info
+      - ~@foo.bar.baz
+    - ~(log:
+      - ~:info
+      - ~@one.0
+    - ~(log:
+      - ~:info
+      - ~@one.1.three.0
+"))]
+      (-> r nil? not is)
+      (-> r flax/returns count zero? is)
+      (clojure.pprint/pprint r)
+      ))
+  )
 
 (deftest test-minimal-with-python
   (testing "A minimal configuration using various interpreters"
