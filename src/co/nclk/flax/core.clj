@@ -46,6 +46,17 @@
   (System/exit 1))
 
 
+(defn get-with-string-maybe-index
+  [key* env]
+  (try
+    (let [idx (Integer/parseInt key*)]
+      (if (sequential? env)
+        (nth env idx)
+        (-> key* keyword env)))
+    (catch NumberFormatException nfe
+      (-> key* keyword env))))
+
+
 (defn swap
   [s env]
   (let [env (merge @genv env)]
@@ -66,8 +77,19 @@
       ;; If `s` starts with ~@, then replace it with the data held by the
       ;; variable (i.e., not a string interpolation of it).
       (.startsWith s "~@")
-      (let [data (-> s (subs 2) keyword env)]
-        (if (string? data) (clojure.string/trim data) data))
+      (let [target (-> s (subs 2))]
+        (loop [target target env env]
+          (cond
+            (-> target (.contains "."))
+            (let [parts (-> target (clojure.string/split #"\." 2))]
+              ;; TODO support bracket sugar (e.g., foo[0].bar[baz])
+              (recur (second parts)
+                     (get-with-string-maybe-index (first parts) env)))
+            :else
+            (when-not (or (empty? env)
+                          (clojure.string/blank? target))
+              (let [data (get-with-string-maybe-index target env)]
+                (if (string? data) (clojure.string/trim data) data))))))
 
       ;; If `s` starts with "~$", then replace it with the
       ;; stdout result of running the script locally.
