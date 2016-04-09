@@ -1,8 +1,5 @@
 (ns co.nclk.flax.core
-  (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
-            [clj-yaml.core :as yaml]
-            [cheshire.core :as json]
-            [cheshire.generate :refer [add-encoder encode-str]]
+  (:require [clj-yaml.core :as yaml]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :refer [log]]
             [co.nclk.flax.node :refer [invoke destroy node-manager]]
@@ -12,9 +9,6 @@
             )
   (:import co.nclk.flax.data.FileDataConnector)
   (:gen-class))
-
-;; Cheshire encoder for all things Runnable.
-(add-encoder java.lang.Runnable encode-str)
 
 (def parser-options (atom {:tag-open "~{" :tag-close "}"}))
 (def genv (atom
