@@ -11,7 +11,8 @@
 (defn slurp-yaml
   [s]
   (let [s (if (.startsWith s (str "~" java.io.File/separator))
-            (clojure.string/replace s #"~" (str (System/getProperty "user.home")))
+            (clojure.string/replace
+              s #"~" (str (System/getProperty "user.home")))
             s)]
     (-> s slurp yaml/parse-string)))
 
