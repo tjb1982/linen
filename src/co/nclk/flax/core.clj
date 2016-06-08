@@ -73,17 +73,18 @@
       (.startsWith s "~@")
       (let [target (-> s (subs 2))]
         (loop [target target env env]
-          (cond
-            (-> target (.contains "."))
-            (let [parts (-> target (clojure.string/split #"\." 2))]
-              ;; TODO support bracket sugar (e.g., foo[0].bar[baz])
-              (recur (second parts)
-                     (get-with-string-maybe-index (first parts) env)))
-            :else
-            (when-not (or (empty? env)
-                          (clojure.string/blank? target))
-              (let [data (get-with-string-maybe-index target env)]
-                (if (string? data) (clojure.string/trim data) data))))))
+          (when-not (or (nil? env) (empty? env))
+            (cond
+              (-> target (.contains "."))
+              (let [parts (-> target (clojure.string/split #"\." 2))]
+                ;; TODO support bracket sugar (e.g., foo[0].bar[baz])
+                (recur (second parts)
+                       (get-with-string-maybe-index (first parts) env)))
+              :else
+              (when-not (or (empty? env)
+                            (clojure.string/blank? target))
+                (let [data (get-with-string-maybe-index target env)]
+                  (if (string? data) (clojure.string/trim data) data)))))))
 
       ;; If `s` starts with "~$", then replace it with the
       ;; stdout result of running the script locally.
@@ -515,8 +516,9 @@
 
       ;; Other collections
       (coll? m)
-      ((if (seq? m) reverse identity)
-        (into (empty m) (doall (map (fn [item] (evaluate item config)) m))))
+      ;;((if (seq? m) reverse identity)
+      (into (if (seq? m) [] (empty m))
+            (doall (map (fn [item] (evaluate item config)) m)))
       
       :else m)))
 

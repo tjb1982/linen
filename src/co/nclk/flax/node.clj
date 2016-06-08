@@ -64,7 +64,9 @@
 (defn- invoke-local
   [checkpoint & [argv]]
   (binding [*log* (not (false? (:log checkpoint)))]
-    (let [tmpfile-name (str (System/getProperty "user.dir") "/.flax-temp-script-" (java.util.UUID/randomUUID))
+    (let [tmpfile-name (str (System/getProperty "user.dir")
+                            "/.flax-temp-script-"
+                            (java.util.UUID/randomUUID))
           proxy? (not (nil? argv))
           argv (or argv
                    (remove clojure.string/blank?
@@ -74,50 +76,85 @@
                           (clojure.string/split
                             (if-let [t (:template d)]
                               (if-not (clojure.string/blank? (:match d))
-                                (clojure.string/replace t (re-pattern (str (:match d))) tmpfile-name)
+                                (clojure.string/replace
+                                  t
+                                  (re-pattern (str (:match d)))
+                                  tmpfile-name)
                                 (str t " " tmpfile-name))
                               (str d " " tmpfile-name))
                             #" ")
                           tmpfile-name
                           )])))]
+
       (when-not proxy?
         (spit tmpfile-name (:source checkpoint))
         (-> (java.io.File. tmpfile-name) (.setExecutable true))
-        (Thread/sleep 100))
+        (Thread/sleep 500))
 
-      (let [proc (-> (Runtime/getRuntime)
-                   (.exec (into-array String argv)))
-            stdout (clojure.java.io/reader (.getInputStream proc))
-            stderr (clojure.java.io/reader (.getErrorStream proc))]
+      (loop []
+        (let [result
+              (try
+                (let [proc (-> (Runtime/getRuntime)
+                             (.exec (into-array String argv)))
+                      stdout (clojure.java.io/reader (.getInputStream proc))
+                      stderr (clojure.java.io/reader (.getErrorStream proc))]
 
-        (when *log*
-          (when (:display checkpoint)
-            (log :info (node-log-str "local" nil (:runid checkpoint) (clojure.string/trim (:display checkpoint)))))
-          (log :debug (node-log-str "local" nil (:runid checkpoint) (clojure.string/join " " argv)))
-          (when-not proxy? (log :debug (node-log-str "local" nil (:runid checkpoint) "Contents of " tmpfile-name ":\n" (:source checkpoint)))))
+                  (when *log*
+                    (when (:display checkpoint)
+                      (log :info (node-log-str
+                                   "local"
+                                   nil
+                                   (:runid checkpoint)
+                                   (clojure.string/trim (:display checkpoint)))))
+                    (log :debug (node-log-str
+                                  "local"
+                                  nil
+                                  (:runid checkpoint)
+                                  (clojure.string/join " " argv)))
+                    (when-not proxy?
+                      (log :debug (node-log-str
+                                    "local"
+                                    nil
+                                    (:runid checkpoint)
+                                    "Contents of "
+                                    tmpfile-name
+                                    ":\n"
+                                    (:source checkpoint)))))
 
-        (let [[out err]
-              (for [stream [stdout stderr]]
-                (future
-                  (loop [lines []]
-                    (let [line (.readLine stream)]
-                      (if (nil? line)
-                        lines
-                        (do
-                          (log :debug (node-log-str "local" nil (:runid checkpoint) line))
-                          (recur (conj lines line))))))))]
+                  (let [[out err]
+                        (for [stream [stdout stderr]]
+                          (future
+                            (loop [lines []]
+                              (let [line (.readLine stream)]
+                                (if (nil? line)
+                                  lines
+                                  (do
+                                    (log :debug (node-log-str
+                                                  "local"
+                                                  nil
+                                                  (:runid checkpoint)
+                                                  line))
+                                    (recur (conj lines line))))))))]
 
-          (let [exit (.waitFor proc)
-                out (clojure.string/join "\n" @out)
-                err (clojure.string/join "\n" @err)
-                result
-                (assoc checkpoint :out {:keys (:out checkpoint) :value out}
-                                  :err {:keys (:err checkpoint) :value err}
-                                  :exit {:keys (:exit checkpoint) :value exit})]
-            (when-not proxy? (clojure.java.io/delete-file tmpfile-name))
-            (when-not (zero? exit)
-              (log-result nil nil exit "local" nil (:runid checkpoint)))
-            result))))))
+                    (let [exit (.waitFor proc)
+                          out (clojure.string/join "\n" @out)
+                          err (clojure.string/join "\n" @err)
+                          result
+                          (assoc checkpoint
+                                 :out {:keys (:out checkpoint) :value out}
+                                 :err {:keys (:err checkpoint) :value err}
+                                 :exit {:keys (:exit checkpoint) :value exit})]
+                      (when-not proxy? (clojure.java.io/delete-file tmpfile-name))
+                      (when-not (zero? exit)
+                        (log-result nil nil exit "local" nil (:runid checkpoint)))
+                      result)))
+                (catch java.io.IOException ioe
+                  (log :warn (.getMessage ioe))
+                  nil))]
+            (if (nil? result)
+              (recur)
+              result)
+            )))))
 
 
 (defn- invoke-remote
