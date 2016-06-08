@@ -1,4 +1,4 @@
-(ns co.nclk.flax.node
+(ns co.nclk.linen.node
   (:require [clojure.tools.logging :refer [log]]
             [clj-ssh.ssh :as ssh])
   (:import com.jcraft.jsch.JSch
@@ -65,7 +65,7 @@
   [checkpoint & [argv]]
   (binding [*log* (not (false? (:log checkpoint)))]
     (let [tmpfile-name (str (System/getProperty "user.dir")
-                            "/.flax-temp-script-"
+                            "/.linen-temp-script-"
                             (java.util.UUID/randomUUID))
           proxy? (not (nil? argv))
           argv (or argv
@@ -170,7 +170,7 @@
             (if (zero? remaining-attempts)
               (assoc checkpoint :out {:keys (:out checkpoint) :value ""}
                                 :err {:keys (:err checkpoint)
-                                      :value (str "flax: " total-attempts " attempts to ssh to " (:name @node) " failed.")}
+                                      :value (str "linen: " total-attempts " attempts to ssh to " (:name @node) " failed.")}
                                 :exit {:keys (:exit checkpoint) :value 1})
               (if-let [resolved-checkpoint
                        (try
@@ -259,7 +259,7 @@
       (or ;; If a node already exists with the node name, just return it.
           (-> @nodes (get (full-node-name self node)))
           (and (nil? (-> node :connector))
-               (do (log :warn (format "flax: connector not found for node: %s. Using \"local\" instead." (:name node)))
+               (do (log :warn (format "linen: connector not found for node: %s. Using \"local\" instead." (:name node)))
                    (-> @nodes (get "local"))))
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)

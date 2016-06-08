@@ -1,16 +1,16 @@
-(ns co.nclk.flax.core
-  (:require [clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
+(ns co.nclk.linen.core
+  (:require ;;[clojure.core.async :as a :refer [chan go >! >!! <! <!! alts!! alts! go-loop thread]]
             [clj-yaml.core :as yaml]
             [cheshire.core :as json]
             [cheshire.generate :refer [add-encoder encode-str]]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :refer [log]]
-            [co.nclk.flax.node :refer [invoke destroy node-manager]]
-            [co.nclk.flax.data :refer [resolve-module resolve-program]]
+            [co.nclk.linen.node :refer [invoke destroy node-manager]]
+            [co.nclk.linen.data :refer [resolve-module resolve-program]]
             [stencil.parser :refer [parse]]
             [stencil.core :refer [render]]
             )
-  (:import co.nclk.flax.data.FileDataConnector)
+  (:import co.nclk.linen.data.FileDataConnector)
   (:gen-class))
 
 ;; Cheshire encoder for all things Runnable.
@@ -630,6 +630,8 @@
     ))
 
 (defn -main [& argv]
-  (run (yaml/parse-string (slurp (first argv)))))
+  (if (first argv)
+    (run (yaml/parse-string (slurp (first argv))))
+    (println "no argument supplied")))
 
 

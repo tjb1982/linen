@@ -1,4 +1,4 @@
-(ns co.nclk.flax.data
+(ns co.nclk.linen.data
   (:require [clj-yaml.core :as yaml])
   (:gen-class))
 

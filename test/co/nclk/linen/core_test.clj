@@ -1,24 +1,24 @@
-(ns co.nclk.flax.core-test
+(ns co.nclk.linen.core-test
   (:require [clojure.test :refer :all]
             [clj-yaml.core :as yaml]
-            [co.nclk.flax.node :refer [node-manager]]
-            [co.nclk.flax.core :as flax]))
+            [co.nclk.linen.node :refer [node-manager]]
+            [co.nclk.linen.core :as linen]))
 
 
 (deftest test-minimal-config
   (testing "A minimal configuration"
-    (let [r (flax/run {:program
+    (let [r (linen/run {:program
                        {:main
                         [{:module
                           {:checkpoints
                            [[{:source "echo Hello World"}]]}}]}})]
       (-> r nil? not is)
-      (-> r flax/returns count (= 1) is)
-      (->> r flax/returns (filter #(-> % :success :value true? not)) count zero? is)
+      (-> r linen/returns count (= 1) is)
+      (->> r linen/returns (filter #(-> % :success :value true? not)) count zero? is)
       (clojure.pprint/pprint r)
       ))
   (testing "Swap functionality"
-     (let [r (flax/run (yaml/parse-string
+     (let [r (linen/run (yaml/parse-string
 "
 env:
   foo:
@@ -41,7 +41,7 @@ program:
       - ~{foo.bar.baz}
 "))]
       (-> r nil? not is)
-      (-> r flax/returns count zero? is)
+      (-> r linen/returns count zero? is)
       (clojure.pprint/pprint r)
       ))
   )
@@ -54,58 +54,58 @@ program:
                        "#!/usr/bin/env node\nconsole.log('Hello JavaScript');"
                        "#!/usr/bin/env dart\nvoid main() { print('Hello Dart'); }"
                        ]
-          r (flax/run {:program
+          r (linen/run {:program
                        {:main
                         [{:module
                           {:checkpoints
                            [(map #(identity {:source %}) invocations)]}}]}})]
       (-> r nil? not is)
-      (-> r flax/returns count (= (count invocations)) is)
-      (->> r flax/returns (filter #(-> % :success :value true? not)) count zero? is)
+      (-> r linen/returns count (= (count invocations)) is)
+      (->> r linen/returns (filter #(-> % :success :value true? not)) count zero? is)
       )))
 
 (deftest test-directive-entry-template-match
   (testing "Using :invocation entry in checkpoint with re-match"
     (let [msg "Interpreter directives are cool"
-          r (flax/run {:env {:msg msg}
+          r (linen/run {:env {:msg msg}
                        :program {:main
                        [{:module {:checkpoints
                         [[{:source "from __future__ import print_function\nimport sys\n\nprint('~{msg}', file=sys.stderr)\n"
                            :invocation
                            {:template "python #" :match "#"}}]]}}]}})]
-      (-> r flax/returns count zero? not is)
-      (-> r flax/returns first :err :value (= msg) is)
+      (-> r linen/returns count zero? not is)
+      (-> r linen/returns first :err :value (= msg) is)
       )))
 
 (deftest test-directive-entry-template-only
   (testing "Using :invocation entry in checkpoint, template only"
     (let [msg "Directives are cool"
-          r (flax/run {:env {:msg msg}
+          r (linen/run {:env {:msg msg}
                        :program {:main
                        [{:module {:checkpoints
                         [[{:source "from __future__ import print_function\nimport sys\n\nprint('~{msg}', file=sys.stderr)\n"
                            :invocation {:template "python"}}]]}}]}})]
-      (-> r flax/returns count zero? not is)
-      (-> r flax/returns first :err :value (= msg) is)
+      (-> r linen/returns count zero? not is)
+      (-> r linen/returns first :err :value (= msg) is)
       )))
 
 (deftest test-directive-entry-string
   (testing "Using :invocation entry in checkpoint, template only with extra spaces"
     (let [msg "Directives are cool"
-          r (flax/run {:env {:msg msg}
+          r (linen/run {:env {:msg msg}
                        :program {:main
                        [{:module {:checkpoints
                         [[{:source "from __future__ import print_function\nimport sys\n\nprint('~{msg}', file=sys.stderr)\n"
                            :invocation "    python   "}]]}}]}})]
-      (-> r flax/returns count zero? not is)
-      (-> r flax/returns first :err :value (= msg) is)
+      (-> r linen/returns count zero? not is)
+      (-> r linen/returns first :err :value (= msg) is)
       )))
 
 (deftest test-concurrent-checkpoints
   (testing "Concurrent checkpoints"
     (let [fname (str (System/getProperty "user.dir") "/testconcurrent")]
       (spit fname "")
-      (let [r (flax/run {:program
+      (let [r (linen/run {:program
                          {:main
                           [{:module
                             {:checkpoints
@@ -113,15 +113,15 @@ program:
                                {:source (str "echo One >> " fname)}]
                               [{:source (str "echo Three >> " fname)}]]}}]}})]
         (-> r nil? not is)
-        (-> r flax/returns count (= 3) is)
-        (->> r flax/returns (filter #(-> % :success :value true? not)) count zero? is)
+        (-> r linen/returns count (= 3) is)
+        (->> r linen/returns (filter #(-> % :success :value true? not)) count zero? is)
         (-> fname slurp (= "One\nTwo\nThree\n") is)
         (clojure.java.io/delete-file fname)
         ))))
 
 (deftest test-depth-first-extract-env
   (testing "Depth-first extract-env"
-    (let [r (flax/run (yaml/parse-string "
+    (let [r (linen/run (yaml/parse-string "
                program:
                  main:
                  - ~(map:
@@ -154,13 +154,13 @@ program:
                
                "))]
       (-> r nil? not is)
-      (-> r flax/returns count (> 1) is)
-      (->> r flax/returns (filter #(-> % :success :value true? not)) count zero? is)
+      (-> r linen/returns count (> 1) is)
+      (->> r linen/returns (filter #(-> % :success :value true? not)) count zero? is)
       )))
 
 (deftest test-evaluate-only
   (testing "Using the `evaluate` function by itself"
-    (let [r (flax/evaluate {:module
+    (let [r (linen/evaluate {:module
                             {:checkpoints
                              [[{:assert
                                 {(keyword "~(fn")
@@ -177,22 +177,22 @@ program:
   (testing "Run with parameters"
     (let [text "lalala"
           fname (str (System/getProperty "user.dir") "/testparams")
-          r (flax/run {:env {:TEXT text :FILENAME fname}
+          r (linen/run {:env {:TEXT text :FILENAME fname}
                        :program
                        {:main
                         [{:module
                           {:checkpoints
                            [[{:source "#!/usr/bin/env python2\nwith open('~{FILENAME}', 'w') as f:\n    f.write('~{TEXT}')\n"}]]}}]}})]
-      (-> r flax/returns first :success :value true? is)
-      (-> r flax/returns first :out :value (= "") is)
-      (-> r flax/returns first :exit :value zero? is)
-      (-> r flax/returns first :err :value (= "") is)
+      (-> r linen/returns first :success :value true? is)
+      (-> r linen/returns first :out :value (= "") is)
+      (-> r linen/returns first :exit :value zero? is)
+      (-> r linen/returns first :err :value (= "") is)
       (clojure.java.io/delete-file fname)
       )))
 
 (deftest test-output-variable
   (testing "Retrieving output variables"
-    (let [r (flax/run {:env {}
+    (let [r (linen/run {:env {}
                        :program {:main [
                        {:out {:FOO "~@TEST"}
                         :children [{:in {:LALA "~@FOO"}
@@ -203,23 +203,23 @@ program:
                          [{:nodes [{:name "local" :out "TEST"}]
                            :source "echo This is a test"}]]}}]}})]
       (clojure.pprint/pprint r)
-      (-> r flax/returns second :out :value (= "junebug This is a test") is)
+      (-> r linen/returns second :out :value (= "junebug This is a test") is)
       )))
 
 (deftest test-resolve-program
   (testing "Resolving a program from a string using the data-connector"
     (let [fname (str (System/getProperty "user.dir") "/test-program-resolve.yaml")]
       (spit fname "main:\n- module:\n    checkpoints:\n    - - source: echo hello resolve")
-      (let [r (flax/run {:env {}
+      (let [r (linen/run {:env {}
                          :program {:main [
                          {:resolve fname}]}})]
         (clojure.java.io/delete-file fname)
-        (-> r flax/returns first :out :value (= "hello resolve") is)
+        (-> r linen/returns first :out :value (= "hello resolve") is)
         ))))
 
 (deftest test-run-module-in-checkpoint
   (testing "Running a module from a checkpoint"
-    (let [r (flax/run {:env {}
+    (let [r (linen/run {:env {}
                        :program
                        {:main [{:module
                                 {:checkpoints [[{:module
