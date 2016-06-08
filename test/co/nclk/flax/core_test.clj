@@ -38,7 +38,7 @@ program:
       - ~@one.0
     - ~(log:
       - ~:info
-      - ~@one.1.three.0
+      - ~{foo.bar.baz}
 "))]
       (-> r nil? not is)
       (-> r flax/returns count zero? is)
