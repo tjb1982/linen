@@ -119,6 +119,32 @@ program:
         (clojure.java.io/delete-file fname)
         ))))
 
+(deftest test-special-forms
+  (testing "~(let"
+    (let [r (linen/run (yaml/parse-string "
+program:
+  main:
+  - ~(let:
+    - - foo
+      - lalala
+    - module:
+        provides:
+        - key: FOO
+        checkpoints:
+        - - source: echo ~{foo}
+            nodes:
+            - out: FOO
+      out:
+        FOOS:
+          ~(conj: [ ~@FOOS, ~@FOO ]
+      children:
+      - ~@FOOS
+              "))]
+      (->> r first second ffirst (= "lalala") is)))
+  (testing "~(fn")
+  (testing "~(if")
+  )
+
 (deftest test-depth-first-extract-env
   (testing "Depth-first extract-env"
     (let [r (linen/run (yaml/parse-string "
@@ -158,7 +184,7 @@ program:
       (->> r linen/returns (filter #(-> % :success :value true? not)) count zero? is)
       )))
 
-(deftest test-evaluate-only
+#_(deftest test-evaluate-only
   (testing "Using the `evaluate` function by itself"
     (let [r (linen/evaluate {:module
                             {:checkpoints
