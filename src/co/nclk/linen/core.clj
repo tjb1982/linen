@@ -17,11 +17,6 @@
 (add-encoder java.lang.Runnable encode-str)
 
 (def parser-options (atom {:tag-open "~{" :tag-close "}"}))
-(def genv (atom
-            (into {}
-              (for [[k v] (System/getenv)]
-                [(keyword k) v]))))
-
 
 (defn upmap
   [fn coll & [delay]]
@@ -91,14 +86,18 @@
         success (if (or (nil? assert-fn)
                         (bool? assert-fn))
                   (if (true? assert-fn) (zero? (:value exit)) true)
-                  (apply assert-fn (map :value [out err exit])))]
+                  (apply assert-fn (map :value [out err exit])))
+        resolved (assoc-in resolved [:success :value] success)]
+
     (when (not (true? success))
+      (log :debug (with-out-str (clojure.pprint/pprint resolved)))
       (log :error (str "[" (:runid resolved) "] Failed."))) 
-    (if (and (not (true? success))
-             (or (:throw node) (:throw resolved)))
-      ;;(throw (AssertionError. (assoc-in resolved [:success :value] false)))
-      (assoc-in resolved [:success :value] false)
-      (assoc-in resolved [:success :value] success))))
+
+    (if (true? success)
+      resolved
+      (if (or (:throw node) (:throw resolved))
+        (throw (AssertionError. resolved))
+        resolved))))
 
 
 (defn run-checkpoint
@@ -147,7 +146,9 @@
   [m c]
   ;; Check that the required params exist in the env for this module to run.
   ;; Either the param exists, or the module defines a default to use instead.
-  (let [env (merge @genv (-> c :env))
+  (let [env (if (:merge-global-environment c)
+              (merge @(:genv c) (:env c))
+              (:env c))
         vars (map #(or (contains? % :default)
                        (-> % :key keyword))
                    (-> m :requires))
@@ -163,7 +164,11 @@
     (if-not (empty? missing)
       ;; If some of the `requires` interfaces are missing, don't bother running it, and
       ;; return nil.
-      (log :error
+      (throw (AssertionError. (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\n"
+                (:name m)
+                (into [] (map first missing))
+                )))
+      #_(log :error
         (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\nEnvironment:\n%s"
                 (:name m)
                 (into [] (map first missing))
@@ -182,6 +187,7 @@
               returns (do-groups run-checkpoint
                         (evaluate checkpoints config)
                         (assoc-flags config checkpoints))]
+
           ;; `returns` is a list of returns.
           ;; A return is a list of done checkpoints, one for each node it was run on.
           ;; The :env here is only referring to the new environment created by
@@ -290,18 +296,15 @@
 
 (defn evaluate
   [m config]
-  (let [config (assoc config :env (merge @genv (:env config)))]
+  (let [config (if (:merge-global-environment config)
+                 (assoc config :env
+                               (merge @(:genv config)
+                                      (:env config)))
+                 config)]
     (cond
 
       (map? m)
       (cond
-
-        ;; Contains :resolve
-        (contains? m :resolve)
-        (-> config :data-connector
-          (resolve-program (evaluate (:resolve m) config))
-          :main
-          (evaluate config))
 
         ;; Contains :children
         (contains? m :children)
@@ -315,6 +318,13 @@
           (conj [patch]
                  (doall (pmap #(evaluate % (assoc config :env env))
                               (:children m)))))
+
+        ;; Contains :resolve
+        (contains? m :resolve)
+        (-> config :data-connector
+          (resolve-program (evaluate (:resolve m) config))
+          :main
+          (evaluate config))
 
         ;; Functions and special forms
         (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
@@ -370,7 +380,10 @@
                    (if (nil? cause)
                      (throw ae)
                      (if (= (type cause) java.lang.AssertionError)
-                       (log :error (str cause))
+                       (do
+                         (log :error (str cause))
+                         (doseq [el (.getStackTrace cause)]
+                           (log :error (str "\t" el))))
                        (recur (.getCause cause))))))
                (finally
                  (log :info "Cleaning up.")
@@ -381,6 +394,7 @@
                          (destroy n))))
                    @(-> config :node-manager :nodes))
                  (log :info "Done cleaning up.")))]
+
     exit
     ))
 
@@ -419,7 +433,8 @@
                                             ;; representations of particular resources. In the future,
                                             ;; database persistence should be supported, with
                                             ;; continued support for file based configuration, too.
-                                            :data-connector data-connector))]
+                                            :data-connector data-connector
+                                            :genv (or (:genv config) (atom {}))))]
       (log :info (str "Seed: " (.getTime effective)))
       result)
     

@@ -24,6 +24,7 @@
 
 
 (def ^:dynamic *log* false)
+(def ^:dynamic *level* :info)
 
 
 (defn node-log-str
@@ -162,7 +163,8 @@
   (if (:proxy checkpoint)
     (invoke-local checkpoint (proxy node (:proxy checkpoint)))
     (if (:source checkpoint)
-      (binding [*log* (not (false? (:log checkpoint)))]
+      (binding [*log* (not (false? (:log checkpoint)))
+                *level* (or (:log checkpoint) :info)]
         (let [node (:data node)
               agent (:ssh-agent @node)
               total-attempts 3]
@@ -179,29 +181,41 @@
                                          (:public_ip @node)
                                          {:strict-host-key-checking :no
                                           :log-level :quiet
-                                          :user-known-hosts-file (or (-> @node :options :user-known-hosts-file) "/dev/null")
+                                          :user-known-hosts-file
+                                          (or (-> @node
+                                                  :options
+                                                  :user-known-hosts-file)
+                                              "/dev/null")
                                           :username (-> @node :options :user)})]
                            (when (and *log*
-                                      (not (clojure.string/blank? (:display checkpoint))))
+                                      (not (clojure.string/blank?
+                                             (:display checkpoint))))
                              (log :info
                                (node-log-str (:short-name @node)
                                              (:public_ip @node)
                                              (:runid checkpoint)
-                                             (clojure.string/trim (:display checkpoint)))))
+                                             (clojure.string/trim
+                                               (:display checkpoint)))))
 
                            (try
 
                              (when-not (ssh/connected? session)
                                (ssh/connect session
-                                            (or (-> @node :options :timeout) (* 60 1000))))
+                                            (or (-> @node :options :timeout)
+                                                (* 60 1000))))
 
                              (when *log*
                                (log :debug (node-log-str (:short-name @node)
                                                          (:public_ip @node)
                                                          (:runid checkpoint)
-                                                         (clojure.string/trim (:source checkpoint)))))
+                                                         (clojure.string/trim
+                                                           (:source checkpoint)))))
 
-                             (let [result (ssh/ssh session {:cmd (str "sudo su " (or (:user checkpoint) "root") " - ")
+                             (let [result (ssh/ssh session {:cmd
+                                                            (str "sudo su "
+                                                                 (or (:user checkpoint)
+                                                                     "root")
+                                                                 " - ")
                                                             :in (:source checkpoint)})]
                                (when *log*
                                  (log-result (:out result)
@@ -224,7 +238,9 @@
                              (node-log-str (:short-name @node)
                                            (:public_ip @node)
                                            (:runid checkpoint)
-                                           (.getMessage se)
+                                           (apply str
+                                             (flatten [(.getMessage se)
+                                                       (map #(str "\n\t" %) (.getStackTrace se))]))
                                            ". "
                                            remaining-attempts
                                            " attempts remaining."))
