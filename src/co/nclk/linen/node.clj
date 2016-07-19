@@ -42,8 +42,9 @@
 
 (defn resolve-connector
   [namesp]
-  (-> namesp symbol require)
-  (-> namesp (str "/connector") symbol resolve))
+  (locking ::lock
+    (-> namesp symbol require)
+    (-> namesp (str "/connector") symbol resolve)))
 
 
 (defrecord LocalNode []
@@ -279,6 +280,7 @@
                    (-> @nodes (get "local"))))
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)
+                ;;_ (println ctor context node)
                 n (-> (ctor context) (create node (full-node-name self node)))
                 agent (ssh/ssh-agent {})]
             (ssh/add-identity agent {:name (:name @(:data @n)) :private-key (-> @(:data @n) :private-key)})
