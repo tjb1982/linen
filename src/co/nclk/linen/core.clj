@@ -138,6 +138,28 @@
               (-> config :node-manager (invoke checkpoint :local) (assert-checkpoint config {})))))
     ))
 
+(defn checkpoint-env
+  [env checkpoint]
+  (let [out-arr (-> checkpoint :out :keys first keyword)
+        err-arr (-> checkpoint :err :keys first keyword)
+        exit-arr (-> checkpoint :exit :keys first keyword)
+        success-arr (-> checkpoint :success :keys first keyword)
+        out (-> checkpoint :out :value)
+        err (-> checkpoint :err :value)
+        exit (-> checkpoint :exit :value)
+        success (-> checkpoint :success :value)]
+    (reduce (fn [env [k v]]
+              (if-not (nil? k)
+                (assoc env k v) env))
+            env
+            [[out-arr (conj (get env out-arr) out)]
+             [(-> checkpoint :out :keys second keyword) out]
+             [err-arr (conj (get env err-arr) err)]
+             [(-> checkpoint :err :keys second keyword) err]
+             [exit-arr (conj (get env exit-arr) exit)]
+             [(-> checkpoint :exit :keys second keyword) exit]
+             [success-arr (conj (get env success-arr) success)]
+             [(-> checkpoint :success :keys second keyword) success]])))
 
 (defn run-module
   [m c]
@@ -151,25 +173,23 @@
                    (-> m :requires))
         missing (remove #(-> % second true?)
                         (map (fn [v]
-                               [v (or ;; Is it both boolean and true, signifying a default value exists?
+                               [v (or ;; Is it both boolean and true, signifying a
+                                      ;; default value exists?
                                       (and (bool? v)
                                            (true? v))
-                                      ;; Or is it a keyword and found in the current env?
+                                      ;; Or is it a keyword and found in the current
+                                      ;; env?
                                       (and (keyword? v)
                                            (not (nil? (-> env v)))))])
                              vars))]
     (if-not (empty? missing)
-      ;; If some of the `requires` interfaces are missing, don't bother running it, and
-      ;; return nil.
-      (throw (AssertionError. (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\n"
-                (:name m)
-                (into [] (map first missing))
-                )))
-      #_(log :error
-        (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\nEnvironment:\n%s"
-                (:name m)
-                (into [] (map first missing))
-                env))
+      ;; If some of the `requires` interfaces are missing, don't bother running it,
+      ;; and throw assertion error.
+      (throw
+        (AssertionError.
+          (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\n"
+                  (:name m)
+                  (into [] (map first missing)))))
       ;; All `requires` interfaces exist, so we're a "go."
       ;; Run the checkpoints. Each checkpoint run will return its return code and
       ;; the vars that should be added to the env.
@@ -192,34 +212,12 @@
           ;; it with any more comprehensive environment before running code that
           ;; depends on the these values.
           {:returns returns
-           :env (reduce (fn [env return]
-                          (merge env
-                            (reduce (fn [env checkpoint]
-                                      (let [out-arr (-> checkpoint :out :keys first keyword)
-                                            err-arr (-> checkpoint :err :keys first keyword)
-                                            exit-arr (-> checkpoint :exit :keys first keyword)
-                                            success-arr (-> checkpoint :success :keys first keyword)
-                                            out (-> checkpoint :out :value)
-                                            err (-> checkpoint :err :value)
-                                            exit (-> checkpoint :exit :value)
-                                            success (-> checkpoint :success :value)]
-                                        (reduce (fn [env [k v]]
-                                                  (if-not (nil? k)
-                                                    (assoc env k v) env))
-                                                env
-                                                [[out-arr (conj (get env out-arr) out)]
-                                                 [(-> checkpoint :out :keys second keyword) out]
-                                                 [err-arr (conj (get env err-arr) err)]
-                                                 [(-> checkpoint :err :keys second keyword) err]
-                                                 [exit-arr (conj (get env exit-arr) exit)]
-                                                 [(-> checkpoint :exit :keys second keyword) exit]
-                                                 [success-arr (conj (get env success-arr) success)]
-                                                 [(-> checkpoint :success :keys second keyword) success]])))
-                                    env
-                                    return)))
-                        {}
-                        returns)}
-          )))))
+           :env (->> returns
+                     (reduce
+                       (fn [env return]
+                         (merge env
+                           (reduce checkpoint-env env return)))
+                       {}))})))))
 
 
 (defn extract-env
@@ -363,10 +361,12 @@
   (let [program (if (map? (:program config))
                   (:program config)
                   (try
-                    (resolve-program (:data-connector config) (evaluate (:program config) config))
+                    (resolve-program (:data-connector config)
+                                     (evaluate (:program config) config))
                     (catch Exception e
                       (die
-                        "The configuration must have a program property, which must resolve to a valid yaml document:"
+                        (str "The configuration must have a program property, "
+                             "which must resolve to a valid yaml document:")
                         (.getMessage e)))))
         config (assoc config :env (evaluate (:env config) config))
         exit (try
@@ -407,10 +407,18 @@
     ;; use the built-in FileDataConnector.
     (let [data-connector (if (:data-connector config)
                            (let [dc-ctor (do (-> config :data-connector symbol require)
-                                             (-> config :data-connector (str "/connector") symbol resolve))]
+                                             (-> config
+                                               :data-connector
+                                               (str "/connector")
+                                               symbol
+                                               resolve))]
                              (if-not dc-ctor
-                               ;; we can't proceed without any way of resolving the location of the program
-                               (die (format "Constructor for data connector `%s` not found" (:data-connector config)))
+                               ;; we can't proceed without any way of resolving the
+                               ;; location of the program
+                               (die
+                                 (format
+                                   "Constructor for data connector `%s` not found"
+                                   (:data-connector config)))
                                (dc-ctor)))
                            (FileDataConnector.))
           effective (let [effective (java.util.Date.
@@ -418,18 +426,22 @@
                                           (-> (java.util.Date.) .getTime)))]
                       (log :info (str "Seed: " (.getTime effective)))
                       effective)
-          result (run-program (assoc config ;; This timestamp is also intended to be used (via .getTime)
-                                            ;; as a seed for any pseudorandom number generation, so that
-                                            ;; randomized testing can be retested as deterministically
-                                            ;; as possible.
+          result (run-program (assoc config ;; This timestamp is also intended to be
+                                            ;; used (via .getTime) as a seed for any
+                                            ;; pseudorandom number generation, so that
+                                            ;; randomized testing can be retested as
+                                            ;; deterministically as possible.
                                             :effective effective
-                                            ;; Instantiate a node manager with an empty node map as an atom.
+                                            ;; Instantiate a node manager with an empty
+                                            ;; node map as an atom.
                                             ;; Takes a seed.
                                             :node-manager (node-manager effective)
-                                            ;; The data connector is for resolving literal
-                                            ;; representations of particular resources. In the future,
-                                            ;; database persistence should be supported, with
-                                            ;; continued support for file based configuration, too.
+                                            ;; The data connector is for resolving
+                                            ;; literal representations of particular
+                                            ;; resources. In the future, database
+                                            ;; persistence should be supported, with
+                                            ;; continued support for file based
+                                            ;; configuration, too.
                                             :data-connector data-connector
                                             :genv (or (:genv config) (atom {}))))]
       (log :info (str "Seed: " (.getTime effective)))
