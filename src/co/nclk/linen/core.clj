@@ -310,9 +310,11 @@
               env (extract-env patch (:env config))]
           ;(assoc patch
           ;       :dependents
+          ;(conj [patch]
+          ;       (doall (pmap #(evaluate % (assoc config :env env))
+          ;                    (:children m)))))
           (conj [patch]
-                 (doall (pmap #(evaluate % (assoc config :env env))
-                              (:children m)))))
+                (evaluate (:children m) (assoc config :env env))))
 
         ;; Contains :resolve
         (contains? m :resolve)
@@ -353,6 +355,14 @@
 
       :else (flax/evaluate m config evaluate))))
 
+(defn clean-up
+  [node-manager]
+  (upmap
+    (fn [[k n]]
+      (when (:data n)
+        (when (-> @(:data n) :options :destroy-on-exit true?)
+          (destroy n))))
+    @(-> node-manager :nodes)))
 
 (defn run-program
   [config]
@@ -371,7 +381,7 @@
         config (assoc config :env (evaluate (:env config) config))
         exit (try
                (when-let [main (:main program)]
-                 (doall (pmap #(evaluate % config) main)))
+                 (evaluate main config))
                (catch java.util.concurrent.ExecutionException ae
                  (loop [cause ae]
                    (if (nil? cause)
@@ -384,12 +394,7 @@
                        (recur (.getCause cause))))))
                (finally
                  (log :info "Cleaning up.")
-                 (upmap
-                   (fn [[k n]]
-                     (when (:data n)
-                       (when (-> @(:data n) :options :destroy-on-exit true?)
-                         (destroy n))))
-                   @(-> config :node-manager :nodes))
+                 (clean-up (-> config :node-manager))
                  (log :info "Done cleaning up.")))]
 
     exit
@@ -426,24 +431,32 @@
                                           (-> (java.util.Date.) .getTime)))]
                       (log :info (str "Seed: " (.getTime effective)))
                       effective)
-          result (run-program (assoc config ;; This timestamp is also intended to be
-                                            ;; used (via .getTime) as a seed for any
-                                            ;; pseudorandom number generation, so that
-                                            ;; randomized testing can be retested as
-                                            ;; deterministically as possible.
-                                            :effective effective
-                                            ;; Instantiate a node manager with an empty
-                                            ;; node map as an atom.
-                                            ;; Takes a seed.
-                                            :node-manager (node-manager effective)
-                                            ;; The data connector is for resolving
-                                            ;; literal representations of particular
-                                            ;; resources. In the future, database
-                                            ;; persistence should be supported, with
-                                            ;; continued support for file based
-                                            ;; configuration, too.
-                                            :data-connector data-connector
-                                            :genv (or (:genv config) (atom {}))))]
+          conf (assoc config ;; This timestamp is also intended to be
+                             ;; used (via .getTime) as a seed for any
+                             ;; pseudorandom number generation, so that
+                             ;; randomized testing can be retested as
+                             ;; deterministically as possible.
+                             :effective effective
+                             ;; Instantiate a node manager with an empty
+                             ;; node map as an atom.
+                             ;; Takes a seed.
+                             :node-manager (node-manager effective)
+                             ;; The data connector is for resolving
+                             ;; literal representations of particular
+                             ;; resources. In the future, database
+                             ;; persistence should be supported, with
+                             ;; continued support for file based
+                             ;; configuration, too.
+                             :data-connector data-connector
+                             :genv (or (:genv config) (atom {})))
+          result (do
+                   #_(-> (Runtime/getRuntime)
+                       (.addShutdownHook
+                         (Thread.
+                           (fn []
+                             (clean-up
+                               (-> conf :node-manager))))))
+                   (run-program conf))]
       (log :info (str "Seed: " (.getTime effective)))
       result)
     

@@ -91,6 +91,7 @@
       (when-not proxy?
         (spit tmpfile-name (:source checkpoint))
         (-> (java.io.File. tmpfile-name) (.setExecutable true))
+        ;; FIXME: can't we poll for something instead?
         (Thread/sleep 500))
 
       (loop []
@@ -136,21 +137,22 @@
                                                   nil
                                                   (:runid checkpoint)
                                                   line))
-                                    (recur (conj lines line))))))))]
-
-                    (let [exit (.waitFor proc)
-                          out (clojure.string/join "\n" @out)
-                          err (clojure.string/join "\n" @err)
-                          result
-                          (assoc checkpoint
-                                 :out {:keys (:out checkpoint) :value out}
-                                 :err {:keys (:err checkpoint) :value err}
-                                 :exit {:keys (:exit checkpoint) :value exit})]
-                      (when-not proxy? (clojure.java.io/delete-file tmpfile-name))
-                      (when-not (zero? exit)
-                        (log-result nil nil exit "local" nil (:runid checkpoint)))
-                      result)))
+                                    (recur (conj lines line))))))))
+                        exit (.waitFor proc)
+                        out (clojure.string/join "\n" @out)
+                        err (clojure.string/join "\n" @err)
+                        result
+                        (assoc checkpoint
+                               :out {:keys (:out checkpoint) :value out}
+                               :err {:keys (:err checkpoint) :value err}
+                               :exit {:keys (:exit checkpoint) :value exit})]
+                    (when-not proxy? (clojure.java.io/delete-file tmpfile-name))
+                    (when-not (zero? exit)
+                      (log-result nil nil exit "local" nil (:runid checkpoint)))
+                    result))
                 (catch java.io.IOException ioe
+                  ;; FIXME: really catch all ioexceptions?
+                  ;; Should we attempt to retry, or can't assume idempotent
                   (log :warn (.getMessage ioe))
                   nil))]
             (if (nil? result)
@@ -294,15 +296,19 @@
                                    @n))
             @n))))
   (invoke [self checkpoint node]
-    (let [ts (java.util.Date.)]
-      (assoc (if (= "local" (full-node-name self node))
-               (invoke-local checkpoint)
-               (let [node (get-node self node)]
-                 (if (nil? (:data node))
-                   (invoke-local checkpoint)
-                   (invoke-remote checkpoint node))))
-             :started (.getTime ts)
-             :finished (.getTime (java.util.Date.))))
+    (let [fun (fn []
+                (let [ts (java.util.Date.)]
+                  (assoc (if (= "local" (full-node-name self node))
+                           (invoke-local checkpoint)
+                           (let [node (get-node self node)]
+                             (if (nil? (:data node))
+                               (invoke-local checkpoint)
+                               (invoke-remote checkpoint node))))
+                         :started (.getTime ts)
+                         :finished (.getTime (java.util.Date.)))))]
+      (if (:abandon checkpoint)
+        (do (future (fun)) nil)
+        (fun)))
     )
   (remove-node [self node] nodes)
   (full-node-name [self node]
