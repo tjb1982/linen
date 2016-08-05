@@ -62,13 +62,27 @@
     (log :debug
       (node-log-str node-name ip runid "stderr: " (clojure.string/trim err)))))
 
+(defn tempfile-name
+  []
+  (str ;;(System/getProperty "user.dir")
+       ".linen-temp-script-"
+       (java.util.UUID/randomUUID)))
+
+(defn invocation-string
+  [invocation tmpfile-name]
+  (if-let [t (:template invocation)]
+    (if-not (clojure.string/blank? (:match invocation))
+      (clojure.string/replace
+        t
+        (re-pattern (str (:match invocation)))
+        tmpfile-name)
+      (str t " " tmpfile-name))
+    (str invocation " " tmpfile-name)))
 
 (defn- invoke-local
   [checkpoint & [argv]]
   (binding [*log* (not (false? (:log checkpoint)))]
-    (let [tmpfile-name (str (System/getProperty "user.dir")
-                            "/.linen-temp-script-"
-                            (java.util.UUID/randomUUID))
+    (let [tmpfile-name (tempfile-name)
           proxy? (not (nil? argv))
           argv (or argv
                    (remove clojure.string/blank?
@@ -76,14 +90,7 @@
                        [(if-let [u (:user checkpoint)] ["sudo" "-u" u])
                         (if-let [d (:invocation checkpoint)]
                           (clojure.string/split
-                            (if-let [t (:template d)]
-                              (if-not (clojure.string/blank? (:match d))
-                                (clojure.string/replace
-                                  t
-                                  (re-pattern (str (:match d)))
-                                  tmpfile-name)
-                                (str t " " tmpfile-name))
-                              (str d " " tmpfile-name))
+                            (invocation-string d tmpfile-name)
                             #" ")
                           tmpfile-name
                           )])))]
@@ -214,12 +221,37 @@
                                                          (clojure.string/trim
                                                            (:source checkpoint)))))
 
-                             (let [result (ssh/ssh session {:cmd
+;;                             (let [result (ssh/ssh session {:cmd
+;;                                                            (str "sudo su "
+;;                                                                 (or (:user checkpoint)
+;;                                                                     "root")
+;;                                                                 " - ")
+;;                                                            :in (:source checkpoint)})]
+                             (let [tmpfile-name (str "./" (tempfile-name))
+                                   instr (str "echo " (-> (clojure.string/trim
+                                                            (with-out-str
+                                                              (clojure.pprint/pprint
+                                                                (:source checkpoint))))
+                                                          (clojure.string/replace "$" "\\$")
+                                                          (clojure.string/replace #"\\n" "\n")
+                                                          (clojure.string/replace #"\\\n" "\n")
+                                                          )
+                                              " > " tmpfile-name
+                                              ";\nchmod a+x " tmpfile-name
+                                              ";\n"
+                                              (invocation-string
+                                                (:invocation checkpoint)
+                                                tmpfile-name)
+                                              ";\nrc=$?"
+                                              ";\nrm " tmpfile-name
+                                              ";\nexit $rc")
+                                   ;;_ (do (println instr)) ;; (System/exit 0))
+                                   result (ssh/ssh session {:cmd
                                                             (str "sudo su "
                                                                  (or (:user checkpoint)
                                                                      "root")
                                                                  " - ")
-                                                            :in (:source checkpoint)})]
+                                                            :in instr})]
                                (when *log*
                                  (log-result (:out result)
                                              (:err result)
