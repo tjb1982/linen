@@ -63,8 +63,9 @@
       (node-log-str node-name ip runid "stderr: " (clojure.string/trim err)))))
 
 (defn tempfile-name
-  []
-  (str (System/getProperty "java.io.tmpdir")
+  [& [local]]
+  (str (when-not (false? local)
+         (System/getProperty "java.io.tmpdir"))
        "/.linen-temp-script-"
        (java.util.UUID/randomUUID)))
 
@@ -227,7 +228,7 @@
 ;;                                                                     "root")
 ;;                                                                 " - ")
 ;;                                                            :in (:source checkpoint)})]
-                             (let [tmpfile-name (str "./" (tempfile-name))
+                             (let [tmpfile-name (str "./" (tempfile-name false))
                                    instr (str "echo " (-> (clojure.string/trim
                                                             (with-out-str
                                                               (clojure.pprint/pprint
