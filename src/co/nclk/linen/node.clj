@@ -64,8 +64,8 @@
 
 (defn tempfile-name
   []
-  (str ;;(System/getProperty "user.dir")
-       ".linen-temp-script-"
+  (str (System/getProperty "java.io.tmpdir")
+       "/.linen-temp-script-"
        (java.util.UUID/randomUUID)))
 
 (defn invocation-string
