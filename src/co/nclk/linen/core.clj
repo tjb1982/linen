@@ -87,6 +87,7 @@
         resolved (assoc-in resolved [:success :value] success)]
 
     (when (not (true? success))
+      (swap! (:failed? config) (fn [_] true))
       (log :debug (with-out-str (clojure.pprint/pprint resolved)))
       (log :error (str "[" (:runid resolved) "] Failed."))) 
 
@@ -356,12 +357,16 @@
       :else (flax/evaluate m config evaluate))))
 
 (defn clean-up
-  [node-manager]
+  [node-manager & [failed]]
   (upmap
     (fn [[k n]]
       (when (:data n)
-        (when (-> @(:data n) :options :destroy-on-exit true?)
-          (destroy n))))
+        (let [options (-> @(:data n) :options)]
+        ;; when destroy-on-exit is true, destroy, unless persist-on-failure is true and the test failed.
+        (when (and (-> options :destroy-on-exit true?)
+                   (not (and failed
+                             (-> options :persist-on-failure true?))))
+          (destroy n)))))
     @(-> node-manager :nodes)))
 
 (defn run-program
@@ -394,7 +399,8 @@
                        (recur (.getCause cause))))))
                (finally
                  (log :info "Cleaning up.")
-                 (clean-up (-> config :node-manager))
+                 (clean-up (:node-manager config)
+                           @(:failed? config))
                  (log :info "Done cleaning up.")))]
 
     exit
@@ -448,7 +454,8 @@
                              ;; continued support for file based
                              ;; configuration, too.
                              :data-connector data-connector
-                             :genv (or (:genv config) (atom {})))
+                             :genv (or (:genv config) (atom {}))
+                             :failed? (atom false))
           result (do
                    #_(-> (Runtime/getRuntime)
                        (.addShutdownHook
