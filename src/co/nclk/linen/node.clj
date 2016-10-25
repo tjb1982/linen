@@ -83,7 +83,9 @@
 (defn- invoke-local
   [checkpoint & [argv]]
   (binding [*log* (not (false? (:log checkpoint)))]
-    (let [tmpfile-name (tempfile-name)
+    (let [tmpfile-name (str (System/getProperty "java.io.tmpdir")
+                            "/"
+                            (tempfile-name))
           proxy? (not (nil? argv))
           argv (or argv
                    (remove clojure.string/blank?
