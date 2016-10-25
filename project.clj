@@ -1,4 +1,4 @@
-(defproject co.nclk/linen "0.1.0-SNAPSHOT"
+(defproject co.nclk/linen "1.1.0-SNAPSHOT"
   :description "Implementation of an interpreter for linen, a domain specific language for modeling coordinated, distributed processes."
   :url "https://github.com/tjb1982/linen"
   :license {:name "Eclipse Public License"
