@@ -65,8 +65,9 @@
 (defn tempfile-name
   [& [local]]
   (str (when-not (false? local)
-         (System/getProperty "java.io.tmpdir"))
-       "/.linen-temp-script-"
+         (str (System/getProperty "java.io.tmpdir")
+              "/"))
+       ".linen-temp-script-"
        (java.util.UUID/randomUUID)))
 
 (defn invocation-string
@@ -83,9 +84,7 @@
 (defn- invoke-local
   [checkpoint & [argv]]
   (binding [*log* (not (false? (:log checkpoint)))]
-    (let [tmpfile-name (str (System/getProperty "java.io.tmpdir")
-                            "/"
-                            (tempfile-name))
+    (let [tmpfile-name (tempfile-name)
           proxy? (not (nil? argv))
           argv (or argv
                    (remove clojure.string/blank?
