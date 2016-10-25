@@ -7,7 +7,7 @@
                  [org.clojure/tools.logging "0.3.1"]
                  [ch.qos.logback/logback-classic "1.1.3"]
                  [stencil "0.5.0"]
-                 [cheshire "5.5.0"]
+                 [cheshire "5.6.3"]
                  [clj-ssh "0.5.11"]
                  ;;[org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  ;;[circleci/clj-yaml "0.5.3"]
