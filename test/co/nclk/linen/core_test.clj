@@ -2,12 +2,14 @@
   (:require [clojure.test :refer :all]
             [clj-yaml.core :as yaml]
             [co.nclk.linen.node :refer [node-manager]]
+            [co.nclk.linen.data :refer [connector]]
             [co.nclk.linen.core :as linen]))
 
+(def conn (connector))
 
 (deftest test-minimal-config
   (testing "A minimal configuration"
-    (let [r (linen/run {:program
+    (let [r (linen/run {:data-connector conn :program 
                        {:main
                         [{:module
                           {:checkpoints
@@ -54,7 +56,7 @@ program:
                        "#!/usr/bin/env node\nconsole.log('Hello JavaScript');"
                        "#!/usr/bin/env dart\nvoid main() { print('Hello Dart'); }"
                        ]
-          r (linen/run {:program
+          r (linen/run {:data-connector conn :program 
                        {:main
                         [{:module
                           {:checkpoints
@@ -68,7 +70,7 @@ program:
   (testing "Using :invocation entry in checkpoint with re-match"
     (let [msg "Interpreter directives are cool"
           r (linen/run {:env {:msg msg}
-                       :program {:main
+                       :data-connector conn :program  {:main
                        [{:module {:checkpoints
                         [[{:source "from __future__ import print_function\nimport sys\n\nprint('~{msg}', file=sys.stderr)\n"
                            :invocation
@@ -81,7 +83,7 @@ program:
   (testing "Using :invocation entry in checkpoint, template only"
     (let [msg "Directives are cool"
           r (linen/run {:env {:msg msg}
-                       :program {:main
+                       :data-connector conn :program  {:main
                        [{:module {:checkpoints
                         [[{:source "from __future__ import print_function\nimport sys\n\nprint('~{msg}', file=sys.stderr)\n"
                            :invocation {:template "python"}}]]}}]}})]
@@ -93,7 +95,7 @@ program:
   (testing "Using :invocation entry in checkpoint, template only with extra spaces"
     (let [msg "Directives are cool"
           r (linen/run {:env {:msg msg}
-                       :program {:main
+                       :data-connector conn :program  {:main
                        [{:module {:checkpoints
                         [[{:source "from __future__ import print_function\nimport sys\n\nprint('~{msg}', file=sys.stderr)\n"
                            :invocation "    python   "}]]}}]}})]
@@ -105,7 +107,7 @@ program:
   (testing "Concurrent checkpoints"
     (let [fname (str (System/getProperty "user.dir") "/testconcurrent")]
       (spit fname "")
-      (let [r (linen/run {:program
+      (let [r (linen/run {:data-connector conn :program 
                          {:main
                           [{:module
                             {:checkpoints
@@ -204,7 +206,7 @@ program:
     (let [text "lalala"
           fname (str (System/getProperty "user.dir") "/testparams")
           r (linen/run {:env {:TEXT text :FILENAME fname}
-                       :program
+                       :data-connector conn :program 
                        {:main
                         [{:module
                           {:checkpoints
@@ -219,7 +221,7 @@ program:
 (deftest test-output-variable
   (testing "Retrieving output variables"
     (let [r (linen/run {:env {}
-                       :program {:main [
+                       :data-connector conn :program  {:main [
                        {:out {:FOO "~@TEST"}
                         :children [{:in {:LALA "~@FOO"}
                                       :module {:requires [{:key "LALA"}] :checkpoints [[{:source "echo junebug ~{LALA}"}]]}}]
@@ -237,7 +239,7 @@ program:
     (let [fname (str (System/getProperty "user.dir") "/test-program-resolve.yaml")]
       (spit fname "main:\n- module:\n    checkpoints:\n    - - source: echo hello resolve")
       (let [r (linen/run {:env {}
-                         :program {:main [
+                         :data-connector conn :program  {:main [
                          {:resolve fname}]}})]
         (clojure.java.io/delete-file fname)
         (-> r linen/returns first :out :value (= "hello resolve") is)
@@ -246,7 +248,7 @@ program:
 (deftest test-run-module-in-checkpoint
   (testing "Running a module from a checkpoint"
     (let [r (linen/run {:env {}
-                       :program
+                       :data-connector conn :program 
                        {:main [{:module
                                 {:checkpoints [[{:module
                                                  {:checkpoints [[{:source "echo Hello first module"}]]}}
