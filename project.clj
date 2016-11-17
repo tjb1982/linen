@@ -13,7 +13,7 @@
                  ;;[org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  ;;[circleci/clj-yaml "0.5.3"]
                  [co.nclk/clj-yaml "0.1.0-SNAPSHOT"]
-                 [co.nclk/flax "2.0.0-SNAPSHOT"]
+                 [co.nclk/flax "2.0.1-SNAPSHOT"]
                  ]
   :aot :all
   :main co.nclk.linen.core)
