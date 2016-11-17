@@ -254,20 +254,20 @@
 
 
 (defn harvest
-  [m config hkey & [reports]]
+  [m hkey & [reports]]
   (cond
     (map? m)
     (if-let [report ((keyword hkey) m)]
       (conj reports report)
       (reduce
         (fn [reports [k v]]
-          (harvest v config hkey reports))
+          (harvest v hkey reports))
         reports m))
 
     (coll? m)
     (reduce
       (fn [reports x]
-        (harvest x config hkey reports))
+        (harvest x hkey reports))
       reports m)
 
     :else reports))
