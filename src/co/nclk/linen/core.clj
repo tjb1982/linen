@@ -136,8 +136,12 @@
       ;; Run it on the local host, returning a list as if it were run on
       ;; potentially several nodes.
       (list (if-not (:node-manager config)
-              (-> (node-manager (or (:effective config) 0)) (invoke checkpoint :local) (assert-checkpoint config {}))
-              (-> config :node-manager (invoke checkpoint :local) (assert-checkpoint config {})))))
+              (-> (node-manager (or (:effective config) 0))
+                  (invoke checkpoint :local)
+                  (assert-checkpoint config {}))
+              (-> config :node-manager
+                  (invoke checkpoint :local)
+                  (assert-checkpoint config {})))))
     ))
 
 (defn checkpoint-env
