@@ -424,23 +424,7 @@
     ;; Dynamically require the namespace containing the data-connector
     ;; and call its constructor; if no data-connector is specified, then
     ;; use the built-in FileDataConnector.
-    (let [data-connector (if (:data-connector config)
-                           (let [dc-ctor (do (-> config :data-connector symbol require)
-                                             (-> config
-                                               :data-connector
-                                               (str "/connector")
-                                               symbol
-                                               resolve))]
-                             (if-not dc-ctor
-                               ;; we can't proceed without any way of resolving the
-                               ;; location of the program
-                               (die
-                                 (format
-                                   "Constructor for data connector `%s` not found"
-                                   (:data-connector config)))
-                               (dc-ctor)))
-                           (FileDataConnector.))
-          effective (let [effective (java.util.Date.
+    (let [effective (let [effective (java.util.Date.
                                       (or (:effective config)
                                           (-> (java.util.Date.) .getTime)))]
                       (log :info (str "Seed: " (.getTime effective)))
@@ -455,13 +439,6 @@
                              ;; node map as an atom.
                              ;; Takes a seed.
                              :node-manager (node-manager effective)
-                             ;; The data connector is for resolving
-                             ;; literal representations of particular
-                             ;; resources. In the future, database
-                             ;; persistence should be supported, with
-                             ;; continued support for file based
-                             ;; configuration, too.
-                             :data-connector data-connector
                              :genv (or (:genv config) (atom {}))
                              :failed? (atom false))
           result (do
