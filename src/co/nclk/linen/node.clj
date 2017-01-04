@@ -79,7 +79,7 @@
         (re-pattern (str (:match invocation)))
         tmpfile-name)
       (str t " " tmpfile-name))
-    (str invocation " " tmpfile-name)))
+    invocation))
 
 (defn- invoke-local
   [checkpoint & [argv]]

@@ -93,7 +93,11 @@
       (swap! (:failed? config)
              (fn [_] true))
       (log :debug (with-out-str (clojure.pprint/pprint resolved)))
-      (log :error (str "[" (:runid resolved) "] Failed."))) 
+      (log :error (str "[" (:runid resolved) "] Failed.")))
+
+ 
+    (when (:log-checkpoints? config)
+      (log :checkpoint resolved))
 
     (if (true? success)
       resolved
@@ -251,7 +255,6 @@
       env m)
 
     :else env))
-
 
 (defn harvest
   [m hkey & [reports]]
