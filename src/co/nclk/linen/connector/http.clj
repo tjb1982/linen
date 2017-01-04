@@ -3,11 +3,17 @@
             [co.nclk.linen.data :as data])
   (:gen-class))
 
+(defn pret
+  [it]
+  (clojure.pprint/pprint it)
+  it)
+
 (defn slurp-yaml
   [s]
-  (-> s clojure.java.io/resource
+  (-> s clojure.java.io/as-url
         slurp
-        yaml/parse-string))
+        yaml/parse-string
+        :data))
 
 (defrecord HTTPDataConnector []
   data/PDataConnector
