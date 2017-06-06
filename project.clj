@@ -1,4 +1,4 @@
-(defproject co.nclk/linen "2.1.0-SNAPSHOT"
+(defproject co.nclk/linen "2.1.0"
   :description "Implementation of an interpreter for flax, a domain specific
                language for modeling coordinated, distributed processes."
   :url "https://github.com/tjb1982/linen"
@@ -10,8 +10,8 @@
                  [stencil "0.5.0"]
                  [cheshire "5.6.3"]
                  [clj-ssh "0.5.14"]
-                 [co.nclk/clj-yaml "0.1.0-SNAPSHOT"]
-                 [co.nclk/flax "2.0.1-SNAPSHOT"]
+                 [co.nclk/clj-yaml "1.0.0"]
+                 [co.nclk/flax "2.0.1"]
                  ]
   :aot :all
   :main co.nclk.linen.core)
