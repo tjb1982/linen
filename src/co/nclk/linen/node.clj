@@ -72,14 +72,17 @@
 
 (defn invocation-string
   [invocation tmpfile-name]
-  (if-let [t (:template invocation)]
-    (if-not (clojure.string/blank? (:match invocation))
-      (clojure.string/replace
-        t
-        (re-pattern (str (:match invocation)))
-        tmpfile-name)
-      (str t " " tmpfile-name))
-    invocation))
+  (if invocation
+    (if (string? invocation)
+      (str invocation " " tmpfile-name)
+      (if-let [t (:template invocation)]
+        (if-not (clojure.string/blank? (:match invocation))
+          (clojure.string/replace
+            t
+            (re-pattern (str (:match invocation)))
+            tmpfile-name)
+          (str t " " tmpfile-name))))
+    tmpfile-name))
 
 (defn- invoke-local
   [checkpoint & [argv]]
@@ -247,7 +250,7 @@
                                               ";\nrc=$?"
                                               ";\nrm " tmpfile-name
                                               ";\nexit $rc")
-                                   ;;_ (do (println instr)) ;; (System/exit 0))
+                                   ;;_ (do (println "CHESTER: " instr)) ;; (System/exit 0))
                                    result (ssh/ssh session {:cmd
                                                             (str "sudo su "
                                                                  (or (:user checkpoint)
@@ -339,11 +342,16 @@
                                (invoke-local checkpoint)
                                (invoke-remote checkpoint node))))
                          :started (.getTime ts)
-                         :finished (.getTime (java.util.Date.)))))]
-      (if (:abandon checkpoint)
-        (do (future (fun)) nil)
-        (fun)))
-    )
+                         :finished (.getTime (java.util.Date.)))))
+          checkpoint (if (:abandon checkpoint)
+                       (do (future (fun)) nil)
+                       (fun))]
+      (if (and checkpoint
+               (false? (:log checkpoint)))
+        ;; disable these keys for checkpoint recording, too, if :log is false
+        (dissoc checkpoint :source :out :err)
+        checkpoint)
+    ))
   (remove-node [self node] nodes)
   (full-node-name [self node]
     (cond
