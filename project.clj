@@ -11,7 +11,7 @@
                  [cheshire "5.6.3"]
                  [clj-ssh "0.5.14"]
                  [co.nclk/clj-yaml "1.0.0"]
-                 [co.nclk/flax "2.0.4"]
+                 [co.nclk/flax "2.0.5"]
                  ]
   :aot :all
   :main co.nclk.linen.core)

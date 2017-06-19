@@ -442,7 +442,7 @@
                              ;; node map as an atom.
                              ;; Takes a seed.
                              :node-manager (node-manager effective)
-                             :genv (or (:genv config) (atom {}))
+                             :genv (or (:genv config) flax/genv)
                              :failed? (atom false))
           result (do
                    #_(-> (Runtime/getRuntime)
