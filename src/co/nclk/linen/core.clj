@@ -14,6 +14,10 @@
   (:gen-class))
 
 (def parser-options (atom {:tag-open "~{" :tag-close "}"}))
+(def genv (atom
+            (into {}
+              (for [[k v] (System/getenv)]
+                [(keyword k) v]))))
 
 (defn upmap
   [fn coll & [delay]]
@@ -335,6 +339,7 @@
         ;; Functions and special forms
         (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
         (flax/evaluate m config evaluate)
+        ;;(flax/evaluate m config (fn [m & [env custom-eval]] (evaluate m config)))
 
         ;; Modules
         (contains? m :module)
@@ -439,7 +444,7 @@
                              ;; node map as an atom.
                              ;; Takes a seed.
                              :node-manager (node-manager effective)
-                             :genv (or (:genv config) flax/genv)
+                             :genv (or (:genv config) genv)
                              :failed? (atom false))
           result (do
                    #_(-> (Runtime/getRuntime)
