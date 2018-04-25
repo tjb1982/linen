@@ -14,7 +14,7 @@
   (:gen-class))
 
 (def parser-options (atom {:tag-open "~{" :tag-close "}"}))
-(def genv (atom
+(def genv (fn []
             (into {}
               (for [[k v] (System/getenv)]
                 [(keyword k) v]))))
@@ -96,7 +96,6 @@
       (log :debug (with-out-str (clojure.pprint/pprint resolved)))
       (log :error (str "[" (:runid resolved) "] Failed.")))
 
- 
     (when (:log-checkpoints? config)
       (log :checkpoint resolved))
 
@@ -180,7 +179,7 @@
   ;; Check that the required params exist in the env for this module to run.
   ;; Either the param exists, or the module defines a default to use instead.
   (let [env (if (:merge-global-environment c)
-              (merge @(:genv c) (:env c))
+              (merge ((:genv c)) (:env c))
               (:env c))
         vars (map #(or (contains? % :default)
                        (-> % :key keyword))
@@ -306,7 +305,7 @@
   [m config]
   (let [config (if (:merge-global-environment config)
                  (assoc config :env
-                               (merge @(:genv config)
+                               (merge ((:genv config))
                                       (:env config)))
                  config)]
     (cond
@@ -337,7 +336,7 @@
           (evaluate config))
 
         ;; Functions and special forms
-        (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
+        (->> (keys m) (some #(-> % name (subs 1) (.startsWith "~("))))
         (flax/evaluate m config evaluate)
         ;;(flax/evaluate m config (fn [m & [env custom-eval]] (evaluate m config)))
 
