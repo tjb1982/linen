@@ -177,7 +177,8 @@
   [checkpoint node]
   (if (:proxy checkpoint)
     (invoke-local checkpoint (proxy node (:proxy checkpoint)))
-    (if (:source checkpoint)
+    (if-not (:source checkpoint)
+      checkpoint
       (binding [*log* (not (false? (:log checkpoint)))
                 *level* (or (:log checkpoint) :info)]
         (let [node (:data node)
