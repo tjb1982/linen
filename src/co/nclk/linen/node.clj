@@ -323,7 +323,8 @@
                 ;;_ (println ctor context node)
                 n (-> (ctor context) (create node (full-node-name self node)))
                 agent (ssh/ssh-agent {})]
-            (ssh/add-identity agent {:name (:name @(:data @n)) :private-key (-> @(:data @n) :private-key)})
+            (ssh/add-identity agent {:name (:name @(:data @n))
+                                     :private-key (-> @(:data @n) :private-key)})
             (swap! (:data @n) #(assoc % :ssh-agent agent
                                         :short-name (short-name node)))
             ;; The `node` returned from the constructor is a promise.
