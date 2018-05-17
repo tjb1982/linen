@@ -100,7 +100,8 @@
       (log :error (str "[" (:runid resolved) "] Failed.")))
 
  
-    (when (:log-checkpoints? config)
+    (when (and (:log-checkpoints? config)
+               (:runid resolved))
       (log :checkpoint resolved))
 
     (if (true? success)
@@ -121,9 +122,9 @@
           ;; sure the variables are mapped to their appropriate values from the
           ;; environment.
           checkpoint (-> checkpoint
-                       (assoc-flags config)
-                       (evaluate config)
-                       (assoc :runid (java.util.UUID/randomUUID)))]
+                         (assoc-flags config)
+                         (evaluate config)
+                         (assoc :runid (java.util.UUID/randomUUID)))]
 
       (if (:nodes checkpoint)
         ;; Run the checkpoint on some nodes in parallel.
@@ -237,7 +238,8 @@
                          (fn [env return]
                            (merge env
                              (reduce checkpoint-env env return)))
-                         {}))}))))))
+                         {})
+                       (merge (:env config)))}))))))
 
 
 (defn extract-env

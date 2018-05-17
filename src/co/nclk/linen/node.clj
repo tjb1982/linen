@@ -84,6 +84,20 @@
           (str t " " tmpfile-name))))
     tmpfile-name))
 
+
+(defn heredoc-src
+  [source terminator]
+  (str
+    \newline
+    (-> (clojure.string/trim source)
+        (clojure.string/replace "$" "\\$")
+        (clojure.string/replace #"\\n" "\n")
+        (clojure.string/replace #"\\\n" "\n"))
+    \newline
+    terminator
+    \newline))
+
+
 (defn- invoke-local
   [checkpoint & [argv]]
   (binding [*log* (not (false? (:log checkpoint)))]
@@ -233,23 +247,16 @@
 ;;                                                                 " - ")
 ;;                                                            :in (:source checkpoint)})]
                              (let [tmpfile-name (str "./" (tempfile-name false))
-                                   instr (str "echo " (-> (clojure.string/trim
-                                                            (with-out-str
-                                                              (clojure.pprint/pprint
-                                                                (:source checkpoint))))
-                                                          (clojure.string/replace "$" "\\$")
-                                                          (clojure.string/replace #"\\n" "\n")
-                                                          (clojure.string/replace #"\\\n" "\n")
-                                                          )
-                                              " > " tmpfile-name
-                                              ";\nchmod a+x " tmpfile-name
-                                              ";\n"
-                                              (invocation-string
-                                                (:invocation checkpoint)
-                                                tmpfile-name)
-                                              ";\nrc=$?"
-                                              ";\nrm " tmpfile-name
-                                              ";\nexit $rc")
+                                   terminator (:runid checkpoint)
+                                   instr (str "cat <<-" terminator " > " tmpfile-name
+                                              (heredoc-src (:source checkpoint) terminator)
+                                              "chmod a+x " tmpfile-name
+                                              "; " (invocation-string
+                                                     (:invocation checkpoint)
+                                                     tmpfile-name)
+                                              "; rc=$?"
+                                              "; rm " tmpfile-name
+                                              "; exit $rc")
                                    ;;_ (do (println "CHESTER: " instr)) ;; (System/exit 0))
                                    result (ssh/ssh session {:cmd
                                                             (str "sudo su "
@@ -285,7 +292,7 @@
                                            remaining-attempts
                                            " attempts remaining."))
                            nil))]
-                resolved-checkpoint
+                (assoc resolved-checkpoint :public_ip (:public_ip @node))
                 (recur (dec remaining-attempts))))))
                 ))))
 
@@ -301,6 +308,7 @@
 
     :else (:name node)))
 
+
 (defrecord NodeManager [nodes effective version context]
   PNodeManager
   (get-node [self node]
@@ -314,15 +322,26 @@
       (map? node)
       (or ;; If a node already exists with the node name, just return it.
           (-> @nodes (get (full-node-name self node)))
+          ;; If there's no connector, then it's assumed that the client code thought it
+          ;; already existed, so we throw an exception because they thought wrong.
           (and (nil? (-> node :connector))
-               (do (log :warn (format "linen: connector not found for node: %s. Using \"local\" instead." (:name node)))
-                   (-> @nodes (get "local"))))
+               (throw (RuntimeException. (str "Unknown node: " (full-node-name self node)))))
+          ;; XXX this really isn't a good idea. Running stuff locally that's
+          ;; intended to be run somewhere else might be destructive.
+          ;;(and (nil? (-> node :connector))
+          ;;     (do
+          ;;       (log :warn
+          ;;         (format "linen: connector not found for node: %s. Using \"local\" instead."
+          ;;                 (:name node)))
+          ;;       (-> @nodes (get "local"))))
+
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)
                 ;;_ (println ctor context node)
                 n (-> (ctor context) (create node (full-node-name self node)))
                 agent (ssh/ssh-agent {})]
-            (ssh/add-identity agent {:name (:name @(:data @n)) :private-key (-> @(:data @n) :private-key)})
+            (ssh/add-identity agent {:name (:name @(:data @n))
+                                     :private-key (-> @(:data @n) :private-key)})
             (swap! (:data @n) #(assoc % :ssh-agent agent
                                         :short-name (short-name node)))
             ;; The `node` returned from the constructor is a promise.
