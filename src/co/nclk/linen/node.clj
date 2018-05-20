@@ -169,8 +169,8 @@
                         err (clojure.string/join "\n" @err)
                         result
                         (assoc checkpoint
-                               :out {:keys (:out checkpoint) :value out}
-                               :err {:keys (:err checkpoint) :value err}
+                               :stdout {:keys (:stdout checkpoint) :value out}
+                               :stderr {:keys (:stderr checkpoint) :value err}
                                :exit {:keys (:exit checkpoint) :value exit}
                                ;; See `core/assert-checkpoint`. `:success` `:value` is
                                ;; determined there:
@@ -202,9 +202,11 @@
               total-attempts 3]
           (loop [remaining-attempts total-attempts]
             (if (zero? remaining-attempts)
-              (assoc checkpoint :out {:keys (:out checkpoint) :value ""}
-                                :err {:keys (:err checkpoint)
-                                      :value (str "linen: " total-attempts " attempts to ssh to " (:name @node) " failed.")}
+              (assoc checkpoint :stdout {:keys (:stdout checkpoint) :value ""}
+                                :stderr {:keys (:stderr checkpoint)
+                                         :value (str "linen: " total-attempts
+                                                     " attempts to ssh to " (:name @node)
+                                                     " failed.")}
                                 :exit {:keys (:exit checkpoint) :value 1})
               (if-let [resolved-checkpoint
                        (try
@@ -268,17 +270,17 @@
                                                                  " - ")
                                                             :in instr})]
                                (when *log*
-                                 (log-result (:out result)
-                                             (:err result)
+                                 (log-result (:stdout result)
+                                             (:stderr result)
                                              (:exit result)
                                              (:short-name @node)
                                              (:public_ip @node)
                                              (:runid checkpoint)))
 
-                               (assoc checkpoint :out {:keys (:out checkpoint)
-                                                       :value (:out result)}
-                                                 :err {:keys (:err checkpoint)
-                                                       :value (:err result)}
+                               (assoc checkpoint :stdout {:keys (:stdout checkpoint)
+                                                          :value (:stdout result)}
+                                                 :stderr {:keys (:stderr checkpoint)
+                                                          :value (:stderr result)}
                                                  :exit {:keys (:exit checkpoint)
                                                         :value (:exit result)}))
 
@@ -371,7 +373,7 @@
       (if (and checkpoint
                (false? (:log checkpoint)))
         ;; disable these keys for checkpoint recording, too, if :log is false
-        (dissoc checkpoint :source :out :err)
+        (dissoc checkpoint :source :stdout :stderr)
         checkpoint)
     ))
   (remove-node [self node] nodes)

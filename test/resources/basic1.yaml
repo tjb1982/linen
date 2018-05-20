@@ -10,5 +10,5 @@ provides:
 checkpoint:
   source: echo hello ~{FOO.name}
   nodes:
-  - out: MESSAGE
+  - stdout: MESSAGE
 

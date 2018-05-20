@@ -89,28 +89,35 @@
       (-> r nil? not is)
       (let [cp (-> r second :checkpoint)]
         (-> cp nil? not is)
-        (->> cp first keys (filter #{:runid :out :err :exit :success}) count (= 5) is)
+        (->> cp first keys (filter #{:runid :stdout :stderr :exit :success}) count (= 5) is)
         (->> cp first :exit :value (= 0) is)
-        (->> cp first :err :value (= "") is)
-        (->> cp first :out :value (= "hello bar") is)
+        (->> cp first :stderr :value (= "") is)
+        (->> cp first :stdout :value (= "hello bar") is)
         (->> cp first :success :value true? is))))
   (testing "A module using :in, :out, and :then"
     (let [src (-> "then.yaml" slurp-test first)
-          r (linen/run-module src (assoc base-config :env {:FOO {:name "bar"}}))]
+          r (linen/evaluate src (assoc base-config :env {:FOO {:name "bar"}}))]
       (-> r nil? not is)
-      (-> r second :child (nth 2) :then first (= "hello bar") is)
-      ;;(clojure.pprint/pprint r)
+      (-> r :child (nth 2) :then first (= "hello bar") is)
       )))
+
 
 (defn rm-dynamic-keys
   [x]
-  (let [keys* #{:runid :started :finished}]
+  (let [keys-to-rm #{:runid :started :finished}
+        checkpoint-keys (conj keys-to-rm
+                              :stdout :stderr :exit :success)]
     (clojure.walk/postwalk
-      #(if (and (map? %)
-                (-> % (select-keys keys*) empty? not))
-         (apply dissoc % keys*)
+      #(if (and (map? %) (contains? % :checkpoint))
+         (do
+           (doall (->> % :checkpoint
+                         (map (fn [n] (-> n (every? checkpoint-keys) is)))))
+           (let [nodes (->> % :checkpoint
+                              (map (fn [n] (->> keys-to-rm (apply dissoc n)))))]
+             (assoc % :checkpoint nodes)))
          %)
       x)))
+
 
 (deftest run-module-test
   (let [test-cases (-> "run-module.yaml" slurp-test)]
@@ -128,6 +135,22 @@
             r (-> base-config (merge config) linen/run rm-dynamic-keys)]
       (testing label
         (-> expected (= r) is))))))
+
+(deftest provides
+  (testing (str "`:provides` key is capable of reducing a list of environments "
+                "harvested from checkpoints")
+    (let [module (-> "out.yaml" slurp-test)
+          r (linen/evaluate module (-> base-config (assoc :env {:FOO {:name "bar"}})))]
+      (-> r first :child :test1 ffirst (= "hello bar 0!") is)
+      (-> r first :child :child :test2 first (= "hello bar 0!") is)
+      (-> r first :child :child :test3
+          (= "this is a test: hello bar 0! hello bar 1! hello bar 2!") is)
+      (-> r first :child :child :test4 (= {:name "bar"}) is)
+      (doseq [x (range 5 10)]
+        (let [k (keyword (str "test" x))]
+          (-> r first :child :child k nil? is)))
+      )))
+   
 
 
 

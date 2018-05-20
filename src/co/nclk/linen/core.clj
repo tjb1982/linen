@@ -14,11 +14,15 @@
   (:gen-class))
 
 
-(declare evaluate run-module run-checkpoint extract-env)
+(declare evaluate run-module run-checkpoint extract-env normalize-module)
 
 
 ;; Cheshire encoder for all things Runnable.
 (add-encoder java.lang.Runnable encode-str)
+
+
+(def checkpoint-binding-keys
+  #{:stdout :stderr :exit :success})
 
 
 (defn runnable?
@@ -48,15 +52,10 @@
 
         ;; Contains :parent/:child dependency
         (and (contains? m :parent) (contains? m :child))
-        ;; `dissoc` the :then entry and run it as if it didn't exist.
-        ;; Then, extract the new environment from the result, and run the 
-        ;; :then entry with that environment.
         (let [parent (evaluate (:parent m) config)
               env (extract-env parent (:env config))]
-          ;;(assoc patch :then (evaluate (:then m) (assoc config :env env)))
-          {:parent parent :child (evaluate (:child m) (assoc config :env env))}
-          #_(conj [patch]
-                (evaluate (:then m) (assoc config :env env))))
+          (merge (evaluate (dissoc m :parent :child) config)
+                 {:parent parent :child (evaluate (:child m) (assoc config :env env))}))
 
         ;; Functions and special forms
         (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
@@ -65,18 +64,16 @@
         ;; Modules
         (contains? m :module)
         (let [config (assoc config :env (merge (:env config)
-                                               (evaluate (:in m) config)))
+                                               (evaluate (:input m) config)))
               module (let [module (:module m)]
                        (if (string? module)
                          (resolve-module
                            (:data-connector config)
                            ;; only evaluating a string here:
                            (evaluate module config))
-                         module))]
-              ;; Run the module. Each module returns a report with a new env
-              ;; based on what it requires/provides, and a list of return values
-              ;; for each checkpoint.
-          (assoc m :module (run-module module config)))
+                         module))
+              clean-env (flax/evaluate (:input m) config)]
+          (assoc m :module (run-module module (assoc config :env clean-env))))
 
         ;; Checkpoints
         (contains? m :checkpoint)
@@ -87,6 +84,26 @@
         (flax/evaluate m config evaluate))
 
       :else (flax/evaluate m config evaluate))))
+
+
+(defn harvest
+  [m hkey & [reports]]
+  (cond
+    (map? m)
+    (if-let [report ((keyword hkey) m)]
+      (conj reports report)
+      (reduce
+        (fn [reports [k v]]
+          (harvest v hkey reports))
+        reports m))
+
+    (coll? m)
+    (reduce
+      (fn [reports x]
+        (harvest x hkey reports))
+      reports m)
+
+    :else reports))
 
 
 (defn extract-env
@@ -100,24 +117,35 @@
       (let [[{provides :provides
               :as header}
              & body] (:module m)
-            venv (extract-env body env)
-            next-env
-            (merge env
-                   (->> provides
-                        (map #(if (string? %) {:key % :value ((keyword %) venv)} %))
-                        (reduce #(assoc %1 (keyword (:key %2))
-                                           (flax/evaluate (:value %2) venv))
-                                {})))]
-        (merge env (evaluate (:out m) next-env)))
+            ;;venv (extract-env body env)
+            cp-envs (harvest body :env)
+            provides-env
+            (->> cp-envs
+                 (reduce (fn [venv cp-env]
+                           (->> provides
+                                (map #(if (string? %) {:key % :value ((keyword %) cp-env)} %))
+                                (reduce #(let [value (flax/evaluate (:value %2) (merge %1 cp-env))]
+                                          (assoc %1 (keyword (:key %2)) value))
+                                        venv)))
+                         {}))
+            next-env (merge env provides-env)]
+            ;;next-env
+            ;;(merge env
+            ;;       (->> provides
+            ;;            (map #(if (string? %) {:key % :value ((keyword %) venv)} %))
+            ;;            (reduce #(assoc %1 (keyword (:key %2))
+            ;;                               (flax/evaluate (:value %2) venv))
+            ;;                    {})))]
+        (merge env (evaluate (:output m) next-env)))
 
 
       (every? #(contains? m %) #{:checkpoint :env})
       (merge env (:env m))
 
-      (contains? m :out)
-      (let [out (evaluate (:out m) {:env env})]
-        (println "LLLLLLLLLL" out env)
-        (merge env out))
+      ;;(contains? m :out)
+      ;;(let [out (evaluate (:out m) {:env env})]
+      ;;  (println "LLLLLLLLLL" out env)
+      ;;  (merge env out))
 
       :else
       (reduce
@@ -136,12 +164,12 @@
 
 (defn assert-checkpoint
   [resolved node config]
-  (let [{:keys [out err exit]} resolved
+  (let [{:keys [stdout stderr exit]} resolved
         assert-fn (evaluate (or (:assert node) (:assert resolved)) config)
         success (if (or (nil? assert-fn)
                         (bool? assert-fn))
                   (if (true? assert-fn) (zero? (:value exit)) true)
-                  (apply assert-fn (map :value [out err exit])))
+                  (apply assert-fn (map :value [stdout stderr exit])))
         resolved (assoc-in resolved [:success :value] success)]
 
     (when (not (true? success))
@@ -169,7 +197,7 @@
 
 (defn checkpoint-env
   [env checkpoint]
-  (->> #{:out :err :exit :success}
+  (->> checkpoint-binding-keys
        (reduce #(let [stream (%2 checkpoint)
                       [array-key single-key] (map keyword (:keys stream))
                       value (:value stream)]
@@ -183,7 +211,7 @@
   "Create a checkpoint-node from a well-formed checkpoint and node.
   "
   [checkpoint node]
-  (-> (->> #{:out :err :exit :success}
+  (-> (->> checkpoint-binding-keys
            (reduce #(assoc %1 %2 [(%1 %2) (%2 node)]) checkpoint))
       (dissoc :nodes)
       (assoc :proxy (:proxy node)
@@ -258,56 +286,41 @@
       (conj module {:name nil}))))
 
 
+(defn normalize-require
+  [r]
+  (if (string? r) {:key r} r))
+
+
 (defn run-module
   "Runs a given module and config.
   "
-  [module* {env :env :or {env {}} :as config}]
+  [module* {env* :env :or {env* {}} :as config}]
   (when (runnable? config)
     (let [module (normalize-module module*)
           [{name* :name
-            requires :requires
-            provides :provides
+            requires* :requires
             :as header} & body] module
-          default-entries (->> requires
-                               (remove #(or (string? %)
-                                            (not (contains? % :default)))))
-          required-keys (->> requires
-                             (remove (set default-entries))
-                             (map #(keyword (or (:key %) %))))
-          missing (->> required-keys
-                       (remove #(contains? env %)))]
+          requires (map normalize-require requires*)
+          requires-keyset (->> requires (map :key) (map keyword) set)
+          default-requires (->> requires (remove #(not (contains? % :default))))
+          non-default-keys (->> requires
+                                (remove (set default-requires))
+                                (map #(keyword (:key %))))
+          ;; Only keys that have been declared `:required` are allowed.
+          env (select-keys env* requires-keyset)
+          missing (->> non-default-keys (remove #(contains? env %)))]
 
       (if-not (empty? missing)
         (throw (IllegalArgumentException.
                  (str "Linen: module \"" name* "\" is missing inputs: " (set missing)))))
 
-      (let [default-env (->> default-entries
+      (let [default-env (->> default-requires
                              (map (fn [{:keys [key default]}] [(keyword key) default]))
                              (into {}))
             env (merge (evaluate default-env config) env)
             config (assoc config :env env)]
         (flatten [header (evaluate body config)]))
       )))
-
-
-(defn harvest
-  [m hkey & [reports]]
-  (cond
-    (map? m)
-    (if-let [report ((keyword hkey) m)]
-      (conj reports report)
-      (reduce
-        (fn [reports [k v]]
-          (harvest v hkey reports))
-        reports m))
-
-    (coll? m)
-    (reduce
-      (fn [reports x]
-        (harvest x hkey reports))
-      reports m)
-
-    :else reports))
 
 
 (def config-keyset
