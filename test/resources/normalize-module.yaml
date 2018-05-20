@@ -1,0 +1,184 @@
+# [nil `(~ah nil)]
+- null
+- - {name: null}
+  - null 
+
+---
+
+# [`() `(~ah)]
+- ~(list: []
+- - {name: null}
+
+---
+
+# [1 `(~ah 1)]
+- 1
+- - {name: null}
+  - 1
+
+---
+
+# ["string" `(~ah "string")]
+- string
+- - {name: null}
+  - string
+
+---
+
+# [\x `(~ah \x)]
+- ~(char: [120]
+- - {name: null}
+  - ~(char: [120]
+
+---
+
+# [0 `(~ah 0)]
+- 0
+- - {name: null}
+  - 0
+
+---
+
+# [{} `(~ah)]
+- {}
+- - {name: null}
+
+---
+
+# [`(~ah ~ah) `(~ah ~ah)]
+- ~(list:
+  - {name: null}
+  - {name: null}
+- - {name: null}
+  - {name: null}
+
+---
+
+# [{:foo nil} `(~ah {:foo nil})]
+- {foo: null}
+- - {name: null}
+  - {foo: null}
+
+---
+
+# [{:foo nil :provides []} `(~ah {:foo nil :provides []})]
+- &1 {foo: null, provides: []}
+- - {name: null}
+  - *1
+
+---
+
+# [{:provides []} `({:name nil :provides []})]
+- {provides: []}
+- - {name: null, provides: []}
+
+---
+
+# [[nil] `(~ah [nil])]
+- [null]
+- - {name: null}
+  - null
+
+---
+
+# ['(nil) `(~ah nil)]
+- ~(list: [null]
+- - {name: null}
+  - null
+
+---
+
+# (let [x {:then \x :provides [] :requires [] :name "x"}]
+#   [`(~x) `(~ah ~x)])
+- ~(list:
+  - &2
+    then:
+      ~(char: [120]
+    provides: []
+    requires: []
+    name: "x"
+- - {name: null}
+  - *2
+
+---
+  
+
+# (let [x {:name "x" :provides [] :requires []}]
+#   [`(~x) `(~x)])
+- ~(list:
+  - &3
+    name: "x"
+    provides: []
+    requires: []
+- - *3
+
+---
+
+# (let [x ['() {:a :bunch :of "stuff"
+#           :that ["is varied" [{:because [0 {:we {} :like nil :testing "!"}]}]]}]]
+#   [`(~x) `(~ah ~x)])
+- - ~(list: []
+  - &4
+    a: "~:bunch"
+    of: stuff
+    that:
+    - is varied
+    - - because:
+        - we: {}
+          like: null
+          testing: "!"
+- ~(list:
+  - {name: null}
+  - ~(list: []
+  - *4
+
+---
+
+# ['(() ()) `(~ah () ())]
+- ~(list:
+  - ~(list: []
+  - ~(list: []
+- - {name: null}
+  - ~(list: []
+  - ~(list: []
+
+---
+
+# ['((())) `(~ah (()))]
+- ~(list:
+  - ~(list:
+    - ~(list: []
+- - {name: null}
+  - ~(list:
+    - ~(list: []
+
+---
+  
+# ['(1 2 3) `(~ah 1 2 3)]
+- ~(list: [1, 2, 3]
+- - {name: null}
+  - 1
+  - 2
+  - 3
+
+---
+
+- &5
+  ~(list:
+  - name: main
+    requires: []
+    provides: []
+  - anything
+- *5
+
+---
+
+- - &6
+    name: main
+    requires: []
+    provides: []
+  - anything
+- ~(list:
+  - *6
+  - anything
+
