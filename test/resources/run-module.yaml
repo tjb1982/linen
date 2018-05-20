@@ -13,8 +13,8 @@ expected:
   provides:
 - checkpoint:
   - <<: *cp
-    out: {keys: [null, null], value: "hello"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, null], value: "hello"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
     node: {name: local}
@@ -35,7 +35,7 @@ module:
     display: Echoing hello
     source: echo hello
     nodes:
-    - out: FOO
+    - stdout: FOO
 expected:
 - name: test1
   requires:
@@ -44,11 +44,11 @@ expected:
 - checkpoint:
   - display: Echoing hello
     source: echo hello
-    out: {keys: [null, FOO], value: "hello"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, FOO], value: "hello"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
-    node: {out: "FOO", name: local}
+    node: {stdout: "FOO", name: local}
     user:
     proxy:
   env: {FOO: "hello"}
@@ -65,7 +65,7 @@ module:
 - checkpoint:
     display: Echoing hello
     source: echo hello
-    out: FOO
+    stdout: FOO
     nodes:
     - {}
     - 
@@ -78,8 +78,8 @@ expected:
   - &cp
     display: Echoing hello
     source: echo hello
-    out: {keys: [FOO, null], value: "hello"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [FOO, null], value: "hello"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
     node: {name: local}
@@ -108,8 +108,8 @@ expected:
 - checkpoint:
   - display: Echoing hello bar
     source: echo hello bar
-    out: {keys: [null, null], value: "hello bar"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, null], value: "hello bar"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
     node: {name: local}
@@ -132,7 +132,7 @@ module:
     display: Echoing hello ~{FOO}
     source: echo hello ~{FOO}
     nodes:
-    - out: FOO
+    - stdout: FOO
 expected:
 - name: test1
   requires:
@@ -143,11 +143,11 @@ expected:
 - checkpoint:
   - display: Echoing hello bar
     source: echo hello bar
-    out: {keys: [null, FOO], value: "hello bar"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, FOO], value: "hello bar"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
-    node: {name: local, out: FOO}
+    node: {name: local, stdout: FOO}
     user:
     proxy:
   env: {FOO: hello bar}
@@ -172,8 +172,8 @@ expected:
 - checkpoint:
   - display: Echoing hello bar
     source: echo hello bar
-    out: {keys: [null, null], value: "hello bar"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, null], value: "hello bar"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
     node: {name: local}
@@ -196,7 +196,7 @@ module:
     display: Echoing hello
     source: echo hello
     nodes:
-    - out: FOO
+    - stdout: FOO
 expected:
 - name: test1
   provides:
@@ -205,11 +205,11 @@ expected:
 - checkpoint:
   - display: Echoing hello
     source: echo hello
-    out: {keys: [null, FOO], value: "hello"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, FOO], value: "hello"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
-    node: {name: local, out: FOO}
+    node: {name: local, stdout: FOO}
     user:
     proxy:
   env: {FOO: "hello"}
@@ -231,8 +231,8 @@ expected:
 - name: test1
 - checkpoint:
   - <<: *cp
-    out: {keys: [null, null], value: "hello"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, null], value: "hello"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: true}
     node: {name: local}
@@ -257,8 +257,8 @@ expected:
 - name: test1
 - checkpoint:
   - <<: *cp
-    out: {keys: [null, null], value: "hello"}
-    err: {keys: [null, null], value: ""}
+    stdout: {keys: [null, null], value: "hello"}
+    stderr: {keys: [null, null], value: ""}
     exit: {keys: [null, null], value: 0}
     success: {keys: [null, null], value: false}
     node: {name: local}

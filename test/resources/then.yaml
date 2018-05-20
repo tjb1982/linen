@@ -9,10 +9,12 @@ parent:
   - checkpoint:
       source: echo hello ~{FOO.name}
       nodes:
-      - out: MESSAGE1
-      - out: MESSAGE2
-      out: MESSAGES
-  out:
+      - stdout: MESSAGE1
+      - stdout: MESSAGE2
+      stdout: MESSAGES
+  input:
+    FOO: ~@FOO
+  output:
     MY_MSG: ~@MESSAGE1
     MY_MSGS: ~@OUT_MSGS
 child:
@@ -22,7 +24,7 @@ child:
     - IN_MSGS
   - - checkpoint:
         source: "echo this is a test: ~{IN_MSG} ~{#IN_MSGS}~{{.}} ~{/IN_MSGS}"
-  in:
+  input:
     IN_MSG: ~@MY_MSG
     IN_MSGS: ~@MY_MSGS
 - module:

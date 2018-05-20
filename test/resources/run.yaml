@@ -14,14 +14,17 @@ config:
           display: Echoing hello
           source: echo hello
           nodes:
-          - out: FOO
-      out:
+          - stdout: FOO
+      output:
         obj: ~@OBJ
     child:
       module:
+      - requires: [obj]
       - checkpoint:
           display: Repeating ~{obj.foo}.
           source: echo ~{obj.foo}~{OBJ.foo}
+      input:
+        obj: ~@obj
 expected:
 - name: test1
 - parent:
@@ -35,24 +38,27 @@ expected:
       - &result
         display: Echoing hello
         source: echo hello
-        out: {keys: [null, FOO], value: "hello"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: "hello"}
-    out: {obj: ~@OBJ}
+    output: {obj: ~@OBJ}
   child:
     module:
     - name:
+      requires: [obj]
     - checkpoint:
       - <<: *result
         display: Repeating hello.
         node: {name: local}
-        out: {keys: [null, null], value: "hello"}
+        stdout: {keys: [null, null], value: "hello"}
       env: {}
+    input:
+      obj: ~@obj
 
 ---
 
@@ -73,15 +79,17 @@ config:
           display: Echoing hello
           source: echo hello
           nodes:
-          - out: FOO
-      out:
+          - stdout: FOO
+      output:
         obj: ~@OBJ
     child:
-      in:
+      input:
         A: "This is the message: ~{obj.foo}"
+        obj: ~@obj
       module:
       - requires:
         - A
+        - obj
       - checkpoint:
           display: Repeating ~{obj.foo} and ~{A}.
           source: echo ~{obj.foo} ~{A}~{OBJ.foo}
@@ -98,28 +106,29 @@ expected:
       - &result
         display: Echoing hello
         source: echo hello
-        out: {keys: [null, FOO], value: "hello"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: "hello"}
-    out: {obj: ~@OBJ}
+    output: {obj: ~@OBJ}
   child:
     module:
     - name:
-      requires: ["A"]
+      requires: [A, obj]
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello."
         source: "echo hello This is the message: hello"
         node: {name: local}
-        out: {keys: [null, null], value: "hello This is the message: hello"}
+        stdout: {keys: [null, null], value: "hello This is the message: hello"}
       env: {}
-    in:
+    input:
       A: "This is the message: ~{obj.foo}"
+      obj: ~@obj
 
 ---
 
@@ -138,15 +147,17 @@ config:
           display: Echoing hello
           source: echo hello
           nodes:
-          - out: FOO
-      out:
+          - stdout: FOO
+      output:
         foo: ~@FOO
     child:
-      in:
+      input:
         A: "This is the message: ~{foo}"
+        foo: ~@foo
       module:
       - requires:
         - key: A
+        - foo
       - checkpoint:
           display: Repeating ~{foo} and ~{A}.
           source: echo ~{foo} ~{A}~{FOO}
@@ -161,29 +172,31 @@ expected:
       - &result
         display: Echoing hello
         source: echo hello
-        out: {keys: [null, FOO], value: "hello"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: "hello"}
-    out: {foo: ~@FOO}
+    output: {foo: ~@FOO}
   child:
     module:
     - name:
       requires:
       - key: A
+      - foo
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello."
         source: "echo hello This is the message: hello"
         node: {name: local}
-        out: {keys: [null, null], value: "hello This is the message: hello"}
+        stdout: {keys: [null, null], value: "hello This is the message: hello"}
       env: {}
-    in:
+    input:
       A: "This is the message: ~{foo}"
+      foo: ~@foo
 
 ---
 
@@ -202,16 +215,18 @@ config:
           display: Echoing hello
           source: echo hello
           nodes:
-          - out: FOO
-      out:
+          - stdout: FOO
+      output:
         foo: ~@FOO
     child:
-      in:
+      input:
         A: "This is the message: ~{foo}"
+        foo: ~@foo
       module:
       - requires:
         - key: A
           default: lalala
+        - foo
       - checkpoint:
           display: Repeating ~{foo} and ~{A}.
           source: echo ~{foo} ~{A}~{FOO}
@@ -226,30 +241,32 @@ expected:
       - &result
         display: Echoing hello
         source: echo hello
-        out: {keys: [null, FOO], value: "hello"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: "hello"}
-    out: {foo: ~@FOO}
+    output: {foo: ~@FOO}
   child:
     module:
     - name:
       requires:
       - key: A
         default: lalala
+      - foo
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello."
         source: "echo hello This is the message: hello"
         node: {name: local}
-        out: {keys: [null, null], value: "hello This is the message: hello"}
+        stdout: {keys: [null, null], value: "hello This is the message: hello"}
       env: {}
-    in:
+    input:
       A: "This is the message: ~{foo}"
+      foo: ~@foo
 
 ---
 
@@ -268,17 +285,19 @@ config:
           display: Echoing hello
           source: echo hello
           nodes:
-          - out: FOO
-      out:
+          - stdout: FOO
+      output:
         foo: ~@FOO
     child:
-      in:
+      input:
         A: "This is the message: ~{foo}"
+        foo: ~@foo
       module:
       - requires:
         - A
         - key: B
           default: lalala
+        - foo
       - checkpoint:
           display: Repeating ~{foo} and ~{A} ~{B}.
           source: echo ~{foo} ~{A}~{FOO} ~{B}
@@ -293,15 +312,15 @@ expected:
       - &result
         display: Echoing hello
         source: echo hello
-        out: {keys: [null, FOO], value: "hello"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: "hello"}
-    out: {foo: ~@FOO}
+    output: {foo: ~@FOO}
   child:
     module:
     - name:
@@ -309,15 +328,17 @@ expected:
       - A
       - key: B
         default: lalala
+      - foo
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello lalala."
         source: "echo hello This is the message: hello lalala"
         node: {name: local}
-        out: {keys: [null, null], value: "hello This is the message: hello lalala"}
+        stdout: {keys: [null, null], value: "hello This is the message: hello lalala"}
       env: {}
-    in:
+    input:
       A: "This is the message: ~{foo}"
+      foo: ~@foo
 
 ---
 
@@ -335,17 +356,19 @@ config:
           display: Echoing hello
           source: echo hello
           nodes:
-          - out: FOO
-      out:
+          - stdout: FOO
+      output:
         foo: ~@FOO
     child:
-    - in:
+    - input:
         A: "This is the message: ~{foo}"
+        foo: ~@foo
       module:
       - requires:
         - A
         - key: B
-          default: lalala
+          default: ~{A} lalala
+        - foo
       - checkpoint:
           display: Repeating ~{foo} and ~{A} ~{B}.
           source: echo ~{foo} ~{A}~{FOO} ~{B}
@@ -364,31 +387,34 @@ expected:
       - &result
         display: Echoing hello
         source: echo hello
-        out: {keys: [null, FOO], value: "hello"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: "hello"}
-    out: {foo: ~@FOO}
+    output: {foo: ~@FOO}
   child:
   - module:
     - name:
       requires:
       - A
       - key: B
-        default: lalala
+        default: ~{A} lalala
+      - foo
     - checkpoint:
       - <<: *result
-        display: "Repeating hello and This is the message: hello lalala."
-        source: "echo hello This is the message: hello lalala"
+        display: "Repeating hello and This is the message: hello This is the message: hello lalala."
+        source: "echo hello This is the message: hello This is the message: hello lalala"
         node: {name: local}
-        out: {keys: [null, null], value: "hello This is the message: hello lalala"}
+        stdout: {keys: [null, null],
+                 value: "hello This is the message: hello This is the message: hello lalala"}
       env: {}
-    in:
+    input:
       A: "This is the message: ~{foo}"
+      foo: ~@foo
   - this:
       is:
         a:
@@ -407,21 +433,24 @@ config:
       - ~(fn:
         - [idx]
         - module:
-          - provides:
+          - requires:
+            - idx
+            provides:
             - FOO
           - checkpoint:
               display: Echoing hello ~{idx}.
               source: echo hello ~{idx}
               nodes:
-              - out: FOO
-          out:
+              - stdout: FOO
+          input: {idx: ~@idx}
+          output:
             foos:
               ~(conj:
               - ~@foos
               - ~@FOO
       - ~(range: [0,3]
     child:
-      in:
+      input:
         A: "~{#foos}~{.} ~{/foos}"
       module:
       - requires:
@@ -436,18 +465,21 @@ expected:
     - name:
       provides:
       - FOO
+      requires:
+      - idx
     - checkpoint:
       - display: Echoing hello 0.
         source: echo hello 0
-        out: {keys: [null, FOO], value: "hello 0"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello 0"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: hello 0}
-    out:
+    input: {idx: ~@idx}
+    output:
       foos:
         ~(conj:
         - ~@foos
@@ -456,18 +488,21 @@ expected:
     - name:
       provides:
       - FOO
+      requires:
+      - idx
     - checkpoint:
       - display: Echoing hello 1.
         source: echo hello 1
-        out: {keys: [null, FOO], value: "hello 1"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello 1"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: hello 1}
-    out:
+    input: {idx: ~@idx}
+    output:
       foos:
         ~(conj:
         - ~@foos
@@ -476,24 +511,27 @@ expected:
     - name:
       provides:
       - FOO
+      requires:
+      - idx
     - checkpoint:
       - display: Echoing hello 2.
         source: echo hello 2
-        out: {keys: [null, FOO], value: "hello 2"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, FOO], value: "hello 2"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
-        node: {name: local, out: FOO}
+        node: {name: local, stdout: FOO}
         user:
         proxy:
       env: {FOO: hello 2}
-    out:
+    input: {idx: ~@idx}
+    output:
       foos:
         ~(conj:
         - ~@foos
         - ~@FOO
   child:
-    in:
+    input:
       A: "~{#foos}~{.} ~{/foos}"
     module:
     - name:
@@ -502,8 +540,8 @@ expected:
     - checkpoint:
       - display: "Echoing hello 2 hello 1 hello 0 ."
         source: "echo hello 2 hello 1 hello 0 "
-        out: {keys: [null, null], value: "hello 2 hello 1 hello 0"}
-        err: {keys: [null, null], value: ""}
+        stdout: {keys: [null, null], value: "hello 2 hello 1 hello 0"}
+        stderr: {keys: [null, null], value: ""}
         exit: {keys: [null, null], value: 0}
         success: {keys: [null, null], value: true}
         node: {name: local}

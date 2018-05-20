@@ -1,0 +1,54 @@
+parent:
+  module:
+  - requires:
+    - FOO
+    provides:
+    - key: MESSAGE2
+      value: ~@MESSAGE1
+    - key: MESSAGES
+      value:
+        ~(conj:
+        - ~@MESSAGES
+        - ~@MESSAGE2
+  - chester:
+      june:
+        ~(pmap:
+        - ~(fn:
+          - [idx]
+          - checkpoint:
+              source: 1>&2 echo hello ~{FOO.name} ~{idx}!
+              nodes:
+              - stderr: MESSAGE1
+        - ~(range: [0,3]
+  input:
+    FOO: ~@FOO
+  output:
+    MY_MSGS: ~@MESSAGES
+child:
+  parent:
+    module:
+    - requires:
+      - IN_MSGS
+      provides:
+      - BACON
+    - - checkpoint:
+          source: "echo this is a test:~{#IN_MSGS} ~{.}~{/IN_MSGS}"
+          nodes:
+          - stdout: BACON
+    input:
+      IN_MSGS: ~@MY_MSGS
+    output:
+      SOMETHING_TASTY: ~@BACON
+  test1:
+  - ~@MY_MSGS
+  child:
+    test2: ~@MY_MSGS
+    test3: ~@SOMETHING_TASTY
+    test4: ~@FOO
+    # the rest should all be nil
+    test5: ~@MESSAGES
+    test6: ~@MESSAGE2
+    test7: ~@MESSAGE1
+    test8: ~@IN_MSGS
+    test9: ~@BACON
+
