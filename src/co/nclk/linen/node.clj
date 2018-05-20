@@ -171,7 +171,10 @@
                         (assoc checkpoint
                                :out {:keys (:out checkpoint) :value out}
                                :err {:keys (:err checkpoint) :value err}
-                               :exit {:keys (:exit checkpoint) :value exit})]
+                               :exit {:keys (:exit checkpoint) :value exit}
+                               ;; See `core/assert-checkpoint`. `:success` `:value` is
+                               ;; determined there:
+                               :success {:keys (:success checkpoint) :value nil})]
                     (when-not proxy? (clojure.java.io/delete-file tmpfile-name))
                     (when-not (zero? exit)
                       (log-result nil nil exit "local" nil (:runid checkpoint)))

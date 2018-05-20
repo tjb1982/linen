@@ -13,79 +13,129 @@
   (:import co.nclk.linen.data.FileDataConnector)
   (:gen-class))
 
-(def parser-options (atom {:tag-open "~{" :tag-close "}"}))
-(def genv (fn []
-            (into {}
-              (for [[k v] (System/getenv)]
-                [(keyword k) v]))))
+
+(declare evaluate run-module run-checkpoint extract-env)
+
+
+;; Cheshire encoder for all things Runnable.
+(add-encoder java.lang.Runnable encode-str)
+
 
 (defn runnable?
   [config]
-  (-> @(:runnable? config) false? not))
-
-(defn upmap
-  [fn coll & [delay]]
-  (doall
-    (for [p (doall
-              (map
-                #(do
-                   (Thread/sleep (or delay 0))
-                   (future (fn %)))
-                coll))]
-      @p)))
+  (let [run? (:runnable? config)]
+    (or (nil? run?)
+        (-> @run? false? not))))
 
 
 (defn bool?
   [tester]
-  (-> tester type (= java.lang.Boolean)))
+  (boolean (some #(% tester) #{true? false?})))
+  ;;(-> tester type (= java.lang.Boolean)))
 
 
-(defn die
-  [& args]
-  (apply println args)
-  (System/exit 1))
+(defn evaluate
+  [m config]
+  (let [config (if (:merge-global-environment config)
+                 (assoc config :env
+                               (merge ((:genv config))
+                                      (:env config)))
+                 config)]
+    (cond
+
+      (map? m)
+      (cond
+
+        ;; Contains :parent/:child dependency
+        (and (contains? m :parent) (contains? m :child))
+        ;; `dissoc` the :then entry and run it as if it didn't exist.
+        ;; Then, extract the new environment from the result, and run the 
+        ;; :then entry with that environment.
+        (let [parent (evaluate (:parent m) config)
+              env (extract-env parent (:env config))]
+          ;;(assoc patch :then (evaluate (:then m) (assoc config :env env)))
+          {:parent parent :child (evaluate (:child m) (assoc config :env env))}
+          #_(conj [patch]
+                (evaluate (:then m) (assoc config :env env))))
+
+        ;; Functions and special forms
+        (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
+        (flax/evaluate m config evaluate)
+
+        ;; Modules
+        (contains? m :module)
+        (let [config (assoc config :env (merge (:env config)
+                                               (evaluate (:in m) config)))
+              module (let [module (:module m)]
+                       (if (string? module)
+                         (resolve-module
+                           (:data-connector config)
+                           ;; only evaluating a string here:
+                           (evaluate module config))
+                         module))]
+              ;; Run the module. Each module returns a report with a new env
+              ;; based on what it requires/provides, and a list of return values
+              ;; for each checkpoint.
+          (assoc m :module (run-module module config)))
+
+        ;; Checkpoints
+        (contains? m :checkpoint)
+        (run-checkpoint (:checkpoint m) config)
+
+        ;; All other maps
+        :else
+        (flax/evaluate m config evaluate))
+
+      :else (flax/evaluate m config evaluate))))
 
 
-(defn get-with-string-maybe-index
-  [key* env]
-  (try
-    (let [idx (Integer/parseInt key*)]
-      (if (sequential? env)
-        (nth env idx)
-        (-> key* keyword env)))
-    (catch NumberFormatException nfe
-      (-> key* keyword env))))
+(defn extract-env
+  [m & [env]]
+  (cond
+
+    (map? m)
+    (cond
+
+      (contains? m :module)
+      (let [[{provides :provides
+              :as header}
+             & body] (:module m)
+            venv (extract-env body env)
+            next-env
+            (merge env
+                   (->> provides
+                        (map #(if (string? %) {:key % :value ((keyword %) venv)} %))
+                        (reduce #(assoc %1 (keyword (:key %2))
+                                           (flax/evaluate (:value %2) venv))
+                                {})))]
+        (merge env (evaluate (:out m) next-env)))
 
 
-(declare evaluate)
+      (every? #(contains? m %) #{:checkpoint :env})
+      (merge env (:env m))
 
+      (contains? m :out)
+      (let [out (evaluate (:out m) {:env env})]
+        (println "LLLLLLLLLL" out env)
+        (merge env out))
 
-(defn assoc-flags
-  [c m]
-  (if (map? m)
-    (merge c (select-keys m [:throw :skip :log :assert]))
-    c))
+      :else
+      (reduce
+        (fn [env [k v]]
+          (merge env (extract-env v env)))
+        env m))
 
+    (coll? m)
+    (reduce
+      (fn [env x]
+        (extract-env x env))
+      env m)
 
-(defn do-groups
-  [fun m config]
-  (doall
-    (mapcat
-      #(if (map? %)
-        (let [config (assoc-flags config %)]
-          (doall
-            (pmap (fn [member] (apply fun member))
-                  (map (fn [x] [x config])
-                       (:group %)))))
-        (doall
-          (pmap (fn [member] (apply fun member))
-                (map (fn [x] [x config])
-                     %))))
-      (if (map? m) (:groups m) m))))
+    :else env))
 
 
 (defn assert-checkpoint
-  [resolved config node]
+  [resolved node config]
   (let [{:keys [out err exit]} resolved
         assert-fn (evaluate (or (:assert node) (:assert resolved)) config)
         success (if (or (nil? assert-fn)
@@ -112,159 +162,133 @@
         resolved))))
 
 
-(defn run-checkpoint
-  [checkpoint config]
-  (when (runnable? config)
-    (let [;; First we snag the flags from the checkpoint
-          ;; and assoc them to the config
-          config (assoc-flags config checkpoint)
-          ;; Then we assoc the config to the checkpoint, so the flags are visible
-          ;; to the `invoke` function. We also evaluate the checkpoint to make
-          ;; sure the variables are mapped to their appropriate values from the
-          ;; environment.
-          checkpoint (-> checkpoint
-                         (assoc-flags config)
-                         (evaluate config)
-                         (assoc :runid (java.util.UUID/randomUUID)))]
+(defn assoc-key-exists
+  [x key* value]
+  (if (nil? key*) x (assoc x key* value)))
 
-      (if (:nodes checkpoint)
-        ;; Run the checkpoint on some nodes in parallel.
-        (->> (:nodes checkpoint)
-          (upmap
-            #(-> config
-              :node-manager
-              (invoke
-                (assoc checkpoint :out [(:out checkpoint)
-                                        (:out %)]
-                                  :err [(:err checkpoint)
-                                        (:err %)]
-                                  :exit [(:exit checkpoint)
-                                         (:exit %)]
-                                  :success {:keys [(:success checkpoint)
-                                                   (:success %)]}
-                                  :proxy (:proxy %)
-                                  :user (:user %))
-                %)
-              (assert-checkpoint config %)
-              )))
-        ;; Run it on the local host, returning a list as if it were run on
-        ;; potentially several nodes.
-        (list (if-not (:node-manager config)
-                (-> (node-manager (or (:effective config) 0))
-                    (invoke checkpoint :local)
-                    (assert-checkpoint config {}))
-                (-> config :node-manager
-                    (invoke checkpoint :local)
-                    (assert-checkpoint config {})))))
-      )))
 
 (defn checkpoint-env
   [env checkpoint]
-  (let [out-arr (-> checkpoint :out :keys first keyword)
-        err-arr (-> checkpoint :err :keys first keyword)
-        exit-arr (-> checkpoint :exit :keys first keyword)
-        success-arr (-> checkpoint :success :keys first keyword)
-        out (-> checkpoint :out :value)
-        err (-> checkpoint :err :value)
-        exit (-> checkpoint :exit :value)
-        success (-> checkpoint :success :value)]
-    (reduce (fn [env [k v]]
-              (if-not (nil? k)
-                (assoc env k v) env))
-            env
-            [[out-arr (conj (get env out-arr) out)]
-             [(-> checkpoint :out :keys second keyword) out]
-             [err-arr (conj (get env err-arr) err)]
-             [(-> checkpoint :err :keys second keyword) err]
-             [exit-arr (conj (get env exit-arr) exit)]
-             [(-> checkpoint :exit :keys second keyword) exit]
-             [success-arr (conj (get env success-arr) success)]
-             [(-> checkpoint :success :keys second keyword) success]])))
+  (->> #{:out :err :exit :success}
+       (reduce #(let [stream (%2 checkpoint)
+                      [array-key single-key] (map keyword (:keys stream))
+                      value (:value stream)]
+                  (-> %1
+                      (assoc-key-exists array-key (conj (get %1 array-key) value))
+                      (assoc-key-exists single-key value)))
+               env)))
+
+
+(defn checkpoint-node
+  "Create a checkpoint-node from a well-formed checkpoint and node.
+  "
+  [checkpoint node]
+  (-> (->> #{:out :err :exit :success}
+           (reduce #(assoc %1 %2 [(%1 %2) (%2 node)]) checkpoint))
+      (dissoc :nodes)
+      (assoc :proxy (:proxy node)
+             :node node
+             :user (:user node))))
+
+
+(defn normalized-node
+  [& [node]]
+  (if node
+    (-> node (assoc :name (:name node "local")))
+    {:name "local"}))
+
+
+(defn run-checkpoint-node
+  "Run a given checkpoint and config on a given node.
+  "
+  [checkpoint node config]
+  (-> config
+      :node-manager
+      (invoke (checkpoint-node checkpoint node) node)
+      (assert-checkpoint node config)))
+
+
+(defn run-checkpoint
+  "Run a given checkpoint and config.
+  "
+  [checkpoint config]
+  (when (runnable? config)
+    (let [checkpoint (-> checkpoint
+                         (evaluate config)
+                         (assoc :runid (java.util.UUID/randomUUID)))
+          return
+          (if (:nodes checkpoint)
+            ;; Run the checkpoint on some nodes in parallel.
+            (->> (:nodes checkpoint)
+                 (map normalized-node)
+                 ;; TODO is pmap the best choice here?
+                 (pmap #(run-checkpoint-node checkpoint % config)))
+            ;; Run it on the local host, returning a list as if it were run on
+            ;; potentially several nodes.
+            (list (let [node (normalized-node)]
+                    (-> (or (:node-manager config)
+                            ;; TODO: why wouldn't there be a node-manager here?
+                            (node-manager (:effective config)))
+                        (invoke (checkpoint-node checkpoint nil) node)
+                        (assoc :node node)
+                        (assert-checkpoint node config)))))]
+      {:checkpoint return
+       :env (reduce checkpoint-env {} return)}
+      )))
+
+
+(defn normalize-module
+  "Attempt to make a given module well-formed.
+   A module is a seq of items. If the argument is not a seq, we wrap it as a lazy-seq.
+   The first item is possibly a header; the rest is the body. If the first item is 
+   not a well-formed header (i.e., contains keys other than `:name`, `:requires`,
+   or `:provides`), then it is regarded as the first item in the body.
+   If a header does exist, and has an entry for `:name`, then that name can only be a
+   non-empty string.
+  "
+  [module*]
+  (let [module (lazy-seq
+                 (if (sequential? module*) module* `(~module*)))
+        head (first module)]
+    (if (and (map? head)
+             (->> head keys (remove #{:name :requires :provides}) empty?))
+      (conj (rest module)
+            (if (-> head :name clojure.string/blank?)
+              (assoc head :name nil) head))
+      (conj module {:name nil}))))
 
 
 (defn run-module
-  [m c]
-  (when (runnable? c)
-    ;; Check that the required params exist in the env for this module to run.
-    ;; Either the param exists, or the module defines a default to use instead.
-    (let [env (if (:merge-global-environment c)
-                (merge @(:genv c) (:env c))
-                (:env c))
-          vars (map #(or (contains? % :default)
-                         (-> % :key keyword))
-                     (-> m :requires))
-          missing (remove #(-> % second true?)
-                          (map (fn [v]
-                                 [v (or ;; Is it both boolean and true, signifying a
-                                        ;; default value exists?
-                                        (and (bool? v)
-                                             (true? v))
-                                        ;; Or is it a keyword and found in the current
-                                        ;; env?
-                                        (and (keyword? v)
-                                             (not (nil? (-> env v)))))])
-                               vars))]
+  "Runs a given module and config.
+  "
+  [module* {env :env :or {env {}} :as config}]
+  (when (runnable? config)
+    (let [module (normalize-module module*)
+          [{name* :name
+            requires :requires
+            provides :provides
+            :as header} & body] module
+          default-entries (->> requires
+                               (remove #(or (string? %)
+                                            (not (contains? % :default)))))
+          required-keys (->> requires
+                             (remove (set default-entries))
+                             (map #(keyword (or (:key %) %))))
+          missing (->> required-keys
+                       (remove #(contains? env %)))]
+
       (if-not (empty? missing)
-        ;; If some of the `requires` interfaces are missing, don't bother running it,
-        ;; and throw assertion error.
-        (throw
-          (AssertionError.
-            (format "Some required inputs are missing for module `%s`.\nMissing: %s\n\n"
-                    (:name m)
-                    (into [] (map first missing)))))
-        ;; All `requires` interfaces exist, so we're a "go."
-        ;; Run the checkpoints. Each checkpoint run will return its return code and
-        ;; the vars that should be added to the env.
-        ;; Scoop up the "provides" and "requires" values from the local env and put
-        ;; them into a new env.
-        (when-let [checkpoints (-> m :checkpoints)]
-          (let [defaults (into {}
-                           (map (fn [x] [(keyword (:key x)) (:default x)])
-                                (:requires m)))
-                config (assoc c :env (merge (evaluate defaults c)
-                                            (:env c)))
-                returns (do-groups run-checkpoint
-                          (evaluate checkpoints config)
-                          (assoc-flags config checkpoints))]
+        (throw (IllegalArgumentException.
+                 (str "Linen: module \"" name* "\" is missing inputs: " (set missing)))))
 
-            ;; `returns` is a list of returns.
-            ;; A return is a list of done checkpoints, one for each node it was run on.
-            ;; The :env here is only referring to the new environment created by
-            ;; this module; it's the responsibility of the calling code to merge
-            ;; it with any more comprehensive environment before running code that
-            ;; depends on the these values.
-            {:returns returns
-             :env (->> returns
-                       (reduce
-                         (fn [env return]
-                           (merge env
-                             (reduce checkpoint-env env return)))
-                         {})
-                       (merge (:env config)))}))))))
+      (let [default-env (->> default-entries
+                             (map (fn [{:keys [key default]}] [(keyword key) default]))
+                             (into {}))
+            env (merge (evaluate default-env config) env)
+            config (assoc config :env env)]
+        (flatten [header (evaluate body config)]))
+      )))
 
-
-(defn extract-env
-  [m & [env]]
-  (cond
-
-    (map? m)
-    (if (contains? m :returns)
-      (let [out (evaluate (:out m)
-                          {:env (merge env
-                                       (-> m :env))})]
-        (merge env out))
-        (reduce
-          (fn [env [k v]]
-            (merge env (extract-env v env)))
-          env m))
-
-    (coll? m)
-    (reduce
-      (fn [env x]
-        (extract-env x env))
-      env m)
-
-    :else env))
 
 (defn harvest
   [m hkey & [reports]]
@@ -286,195 +310,63 @@
     :else reports))
 
 
-(defn returns
-  [m & [rets]]
-  (cond
-    (map? m)
-    (if-let [r (-> m :returns)]
-      (reduce
-        #(concat %1 %2)
-        rets r)
-      (reduce
-        (fn [rets [k v]]
-          (returns v rets))
-        rets m))
-
-    (coll? m)
-    (reduce
-      (fn [rets x]
-        (returns x rets))
-      rets m)
-
-    :else rets))
+(def config-keyset
+  "The required keyset for the global config map.
+  "
+  #{:effective :main})
 
 
-(declare run-program)
-
-
-(defn evaluate
-  [m config]
-  (let [config (if (:merge-global-environment config)
-                 (assoc config :env
-                               (merge ((:genv config))
-                                      (:env config)))
-                 config)]
-    (cond
-
-      (map? m)
-      (cond
-
-        ;; Contains :children
-        (contains? m :children)
-        ;; `dissoc` the :then entry and run it as if it didn't exist.
-        ;; Then, extract the new environment from the result, and run the 
-        ;; :then entry with that environment.
-        (let [patch (evaluate (dissoc m :children) config)
-              env (extract-env patch (:env config))]
-          ;(assoc patch
-          ;       :dependents
-          ;(conj [patch]
-          ;       (doall (pmap #(evaluate % (assoc config :env env))
-          ;                    (:children m)))))
-          (conj [patch]
-                (evaluate (:children m) (assoc config :env env))))
-
-        ;; Contains :resolve
-        (contains? m :resolve)
-        (-> config :data-connector
-          (resolve-program (evaluate (:resolve m) config))
-          :main
-          (evaluate config))
-
-        ;; Functions and special forms
-        (->> (keys m) (some #(-> % name (subs 1) (.startsWith "~("))))
-        (flax/evaluate m config evaluate)
-        ;;(flax/evaluate m config (fn [m & [env custom-eval]] (evaluate m config)))
-
-        ;; Modules
-        (contains? m :module)
-        (let [config (assoc config :env (merge (:env config)
-                                               (evaluate (:in m) config)))
-              module (if (string? (:module m))
-                       (resolve-module
-                         (:data-connector config)
-                         (evaluate (:module m) config))
-                       (:module m))
-              ;; Run the module. Each module returns a report with a new env
-              ;; based on what it requires/provides, and a list of return values
-              ;; for each checkpoint.
-              report (run-module module (assoc-flags config m))
-              ;; The new env is made up of the old env, with any keys being
-              ;; overridden by the :out keys in the patch. All the others are
-              ;; ignored.
-              out (evaluate (:out m)
-                            (assoc config :env (merge (:env config)
-                                                      (:env report))))]
-          ;(assoc m :report report))
-          (merge m report))
-
-        ;; All other maps
-        :else
-        (flax/evaluate m config evaluate))
-
-      :else (flax/evaluate m config evaluate))))
-
-(defn clean-up
-  [node-manager & [failed]]
-  (upmap
-    (fn [[k n]]
-      (when (:data n)
-        (let [options (-> @(:data n) :options)]
-        ;; when destroy-on-exit is true, destroy, unless persist-on-failure is true and the test failed.
-        (when (and (-> options :destroy-on-exit true?)
-                   (not (and failed
-                             (-> options :persist-on-failure true?))))
-          (destroy n)))))
-    @(-> node-manager :nodes)))
-
-(defn run-program
+(defn config-pre-check
+  "Checks to be sure the global config is well-formed.
+  "
   [config]
-  (when (runnable? config)
-    ;; A program's main is a collection of one or more entry point groups
-    ;; that are kicked off concurrently.
-    (let [program (if (map? (:program config))
-                    (:program config)
-                    (try
-                      (resolve-program (:data-connector config)
-                                       (evaluate (:program config) config))
-                      (catch Exception e
-                        (die
-                          (str "The configuration must have a program property, "
-                               "which must resolve to a valid yaml document:")
-                          (.getMessage e)))))
-          config (assoc config :env (evaluate (:env config) config))
-          exit (try
-                 (when-let [main (:main program)]
-                   (evaluate main config))
-                 (catch java.util.concurrent.ExecutionException ae
-                   (loop [cause ae]
-                     (if (nil? cause)
-                       (throw ae)
-                       (if (= (type cause) java.lang.AssertionError)
-                         (do
-                           (log :error (str cause))
-                           (doseq [el (.getStackTrace cause)]
-                             (log :error (str "\t" el))))
-                         (recur (.getCause cause))))))
-                 (finally
-                   (log :info "Cleaning up.")
-                   (clean-up (:node-manager config)
-                             @(:failed? config))
-                   (log :info "Done cleaning up.")))]
+  (let [missing-keys (->> config-keyset
+                          (remove #(contains? config %))
+                          set)]
+    (if-not (empty? missing-keys)
+      (throw (IllegalArgumentException.
+               (str "Linen: config missing required entries for: " missing-keys)))))
+  ;; TODO: make this a separate function so that we can do this (or something akin to it)
+  ;; recursively for the entire program, and then again for each
+  ;; module resolution (i.e., when we get something from an outside data source)
+  #_(let [module (normalize-module (:main config))]
+    (if-not (every? #(-> module %) [#(-> % coll?)
+                                    #(-> % map? not)
+                                    #(-> % count (>= 2))
+                                    #(-> % first map?)])
+      (throw (IllegalArgumentException.
+               (str "Linen: `:main` must be a complete module, a sequence of at least two objects. "
+                    "The first should contain a map, the module header; "
+                    "the rest should contain the module body. Received: "
+                    (json/generate-string module)))))
+    (let [[header & body] module]
+      ;; assert things about header and body
+      #_(if-not (:name header)
+        (throw (IllegalArgumentException.
+                 (str "Linen: the :main module header must contain a :name.")))))))
 
-      exit
-      )))
+
+(defn genv
+  "Returns the global system environment.
+  "
+  []
+  (-> (System/getenv)
+      (map (fn [[k v]] [(keyword k) v]))))
 
 
 (defn run
+  "The entry point for any well-formed program config.
+  "
   [config]
-  (when (runnable? config)
-    ;; Google "clojure stencil" (for the stencil library) for help finding
-    ;; what these options can be. It's not particularly easy. -- tjb
-    (swap! parser-options #(merge % (or (:parser-options config) {})))
-    (try
-      ;; Dynamically require the namespace containing the data-connector
-      ;; and call its constructor; if no data-connector is specified, then
-      ;; use the built-in FileDataConnector.
-      (let [effective (let [effective (java.util.Date.
-                                        (or (:effective config)
-                                            (-> (java.util.Date.) .getTime)))]
-                        (log :info (str "Seed: " (.getTime effective)))
-                        effective)
-            conf (assoc config ;; This timestamp is also intended to be
-                               ;; used (via .getTime) as a seed for any
-                               ;; pseudorandom number generation, so that
-                               ;; randomized testing can be retested as
-                               ;; deterministically as possible.
-                               :effective effective
-                               ;; Instantiate a node manager with an empty
-                               ;; node map as an atom.
-                               ;; Takes a seed.
-                               :node-manager (node-manager effective)
-                               :genv (or (:genv config) flax/genv)
-                               :failed? (atom false))
-            result (do
-                     #_(-> (Runtime/getRuntime)
-                         (.addShutdownHook
-                           (Thread.
-                             (fn []
-                               (clean-up
-                                 (-> conf :node-manager))))))
-                     (run-program conf))]
-        (log :info (str "Seed: " (.getTime effective)))
-        result)
-      
-      (catch java.io.FileNotFoundException fnfe
-        (die "Resource could not be found:" (.getMessage fnfe)))
-      )))
-
-(defn -main [& argv]
-  (if (first argv)
-    (run (yaml/parse-string (slurp (first argv))))
-    (println "no argument supplied")))
-
+  (config-pre-check config)
+  (let [effective (java.util.Date. (long (:effective config)))
+        config (assoc config :effective effective
+                             :runnable? (atom true)
+                             :node-manager (node-manager effective)
+                             :genv (or (:genv config) genv)
+                             :failed? (atom false))
+        {module :main} config
+        result (run-module module config)]
+    (log :info (str "Seed: " (.getTime effective)))
+    result))
 

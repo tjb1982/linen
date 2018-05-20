@@ -1,0 +1,513 @@
+label: >-
+  Hello world with `:provides` using `:then`, having differing structure.
+env: {}
+config:
+  main:
+  - name: test1
+  - parent:
+      module:
+      - provides:
+        - key: OBJ
+          value:
+            foo: ~@FOO
+      - checkpoint:
+          display: Echoing hello
+          source: echo hello
+          nodes:
+          - out: FOO
+      out:
+        obj: ~@OBJ
+    child:
+      module:
+      - checkpoint:
+          display: Repeating ~{obj.foo}.
+          source: echo ~{obj.foo}~{OBJ.foo}
+expected:
+- name: test1
+- parent:
+    module:
+    - name:
+      provides:
+      - key: OBJ
+        value:
+          foo: ~@FOO
+    - checkpoint:
+      - &result
+        display: Echoing hello
+        source: echo hello
+        out: {keys: [null, FOO], value: "hello"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: "hello"}
+    out: {obj: ~@OBJ}
+  child:
+    module:
+    - name:
+    - checkpoint:
+      - <<: *result
+        display: Repeating hello.
+        node: {name: local}
+        out: {keys: [null, null], value: "hello"}
+      env: {}
+
+---
+
+label: >-
+  Hello world with `:provides` using `:then`, having differing structure; then input using
+  key as string literal.
+env: {}
+config:
+  main:
+  - name: test1
+  - parent:
+      module:
+      - provides:
+        - key: OBJ
+          value:
+            foo: ~@FOO
+      - checkpoint:
+          display: Echoing hello
+          source: echo hello
+          nodes:
+          - out: FOO
+      out:
+        obj: ~@OBJ
+    child:
+      in:
+        A: "This is the message: ~{obj.foo}"
+      module:
+      - requires:
+        - A
+      - checkpoint:
+          display: Repeating ~{obj.foo} and ~{A}.
+          source: echo ~{obj.foo} ~{A}~{OBJ.foo}
+expected:
+- name: test1
+- parent:
+    module:
+    - name:
+      provides:
+      - key: OBJ
+        value:
+          foo: ~@FOO
+    - checkpoint:
+      - &result
+        display: Echoing hello
+        source: echo hello
+        out: {keys: [null, FOO], value: "hello"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: "hello"}
+    out: {obj: ~@OBJ}
+  child:
+    module:
+    - name:
+      requires: ["A"]
+    - checkpoint:
+      - <<: *result
+        display: "Repeating hello and This is the message: hello."
+        source: "echo hello This is the message: hello"
+        node: {name: local}
+        out: {keys: [null, null], value: "hello This is the message: hello"}
+      env: {}
+    in:
+      A: "This is the message: ~{obj.foo}"
+
+---
+
+label: >-
+  Hello world with `:provides` as string literal, using `:then`; then input using
+  key as map (without default).
+env: {}
+config:
+  main:
+  - name: test1
+  - parent:
+      module:
+      - provides:
+        - FOO
+      - checkpoint:
+          display: Echoing hello
+          source: echo hello
+          nodes:
+          - out: FOO
+      out:
+        foo: ~@FOO
+    child:
+      in:
+        A: "This is the message: ~{foo}"
+      module:
+      - requires:
+        - key: A
+      - checkpoint:
+          display: Repeating ~{foo} and ~{A}.
+          source: echo ~{foo} ~{A}~{FOO}
+expected:
+- name: test1
+- parent:
+    module:
+    - name:
+      provides:
+      - FOO
+    - checkpoint:
+      - &result
+        display: Echoing hello
+        source: echo hello
+        out: {keys: [null, FOO], value: "hello"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: "hello"}
+    out: {foo: ~@FOO}
+  child:
+    module:
+    - name:
+      requires:
+      - key: A
+    - checkpoint:
+      - <<: *result
+        display: "Repeating hello and This is the message: hello."
+        source: "echo hello This is the message: hello"
+        node: {name: local}
+        out: {keys: [null, null], value: "hello This is the message: hello"}
+      env: {}
+    in:
+      A: "This is the message: ~{foo}"
+
+---
+
+label: >-
+  Hello world with `:provides` as string literal, using `:then`; then input using
+  key as map (with unused default).
+env: {}
+config:
+  main:
+  - name: test1
+  - parent:
+      module:
+      - provides:
+        - FOO
+      - checkpoint:
+          display: Echoing hello
+          source: echo hello
+          nodes:
+          - out: FOO
+      out:
+        foo: ~@FOO
+    child:
+      in:
+        A: "This is the message: ~{foo}"
+      module:
+      - requires:
+        - key: A
+          default: lalala
+      - checkpoint:
+          display: Repeating ~{foo} and ~{A}.
+          source: echo ~{foo} ~{A}~{FOO}
+expected:
+- name: test1
+- parent:
+    module:
+    - name:
+      provides:
+      - FOO
+    - checkpoint:
+      - &result
+        display: Echoing hello
+        source: echo hello
+        out: {keys: [null, FOO], value: "hello"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: "hello"}
+    out: {foo: ~@FOO}
+  child:
+    module:
+    - name:
+      requires:
+      - key: A
+        default: lalala
+    - checkpoint:
+      - <<: *result
+        display: "Repeating hello and This is the message: hello."
+        source: "echo hello This is the message: hello"
+        node: {name: local}
+        out: {keys: [null, null], value: "hello This is the message: hello"}
+      env: {}
+    in:
+      A: "This is the message: ~{foo}"
+
+---
+
+label: >-
+  Hello world with `:provides` as string literal, using `:then`; then input using
+  mixed `:requires` inputs: string and map (map with useful default).
+env: {}
+config:
+  main:
+  - name: test1
+  - parent:
+      module:
+      - provides:
+        - FOO
+      - checkpoint:
+          display: Echoing hello
+          source: echo hello
+          nodes:
+          - out: FOO
+      out:
+        foo: ~@FOO
+    child:
+      in:
+        A: "This is the message: ~{foo}"
+      module:
+      - requires:
+        - A
+        - key: B
+          default: lalala
+      - checkpoint:
+          display: Repeating ~{foo} and ~{A} ~{B}.
+          source: echo ~{foo} ~{A}~{FOO} ~{B}
+expected:
+- name: test1
+- parent:
+    module:
+    - name:
+      provides:
+      - FOO
+    - checkpoint:
+      - &result
+        display: Echoing hello
+        source: echo hello
+        out: {keys: [null, FOO], value: "hello"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: "hello"}
+    out: {foo: ~@FOO}
+  child:
+    module:
+    - name:
+      requires:
+      - A
+      - key: B
+        default: lalala
+    - checkpoint:
+      - <<: *result
+        display: "Repeating hello and This is the message: hello lalala."
+        source: "echo hello This is the message: hello lalala"
+        node: {name: local}
+        out: {keys: [null, null], value: "hello This is the message: hello lalala"}
+      env: {}
+    in:
+      A: "This is the message: ~{foo}"
+
+---
+
+label: >-
+  Hello world with `:then`, using `:module` `:out` randomly.
+env: {}
+config:
+  main:
+  - name: test1
+  - parent:
+      module:
+      - provides:
+        - FOO
+      - checkpoint:
+          display: Echoing hello
+          source: echo hello
+          nodes:
+          - out: FOO
+      out:
+        foo: ~@FOO
+    child:
+    - in:
+        A: "This is the message: ~{foo}"
+      module:
+      - requires:
+        - A
+        - key: B
+          default: lalala
+      - checkpoint:
+          display: Repeating ~{foo} and ~{A} ~{B}.
+          source: echo ~{foo} ~{A}~{FOO} ~{B}
+    - this:
+        is:
+          a:
+            test: ~@foo
+expected:
+- name: test1
+- parent:
+    module:
+    - name:
+      provides:
+      - FOO
+    - checkpoint:
+      - &result
+        display: Echoing hello
+        source: echo hello
+        out: {keys: [null, FOO], value: "hello"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: "hello"}
+    out: {foo: ~@FOO}
+  child:
+  - module:
+    - name:
+      requires:
+      - A
+      - key: B
+        default: lalala
+    - checkpoint:
+      - <<: *result
+        display: "Repeating hello and This is the message: hello lalala."
+        source: "echo hello This is the message: hello lalala"
+        node: {name: local}
+        out: {keys: [null, null], value: "hello This is the message: hello lalala"}
+      env: {}
+    in:
+      A: "This is the message: ~{foo}"
+  - this:
+      is:
+        a:
+          test: hello
+
+---
+
+label: >-
+  Reducing the output of several modules into a list.
+env: {}
+config:
+  main:
+  - name: test1
+  - parent:
+      ~(pmap:
+      - ~(fn:
+        - [idx]
+        - module:
+          - provides:
+            - FOO
+          - checkpoint:
+              display: Echoing hello ~{idx}.
+              source: echo hello ~{idx}
+              nodes:
+              - out: FOO
+          out:
+            foos:
+              ~(conj:
+              - ~@foos
+              - ~@FOO
+      - ~(range: [0,3]
+    child:
+      in:
+        A: "~{#foos}~{.} ~{/foos}"
+      module:
+      - requires:
+        - A
+      - checkpoint:
+          display: Echoing ~{A}.
+          source: echo ~{A}
+expected:
+- name: test1
+- parent:
+  - module:
+    - name:
+      provides:
+      - FOO
+    - checkpoint:
+      - display: Echoing hello 0.
+        source: echo hello 0
+        out: {keys: [null, FOO], value: "hello 0"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: hello 0}
+    out:
+      foos:
+        ~(conj:
+        - ~@foos
+        - ~@FOO
+  - module:
+    - name:
+      provides:
+      - FOO
+    - checkpoint:
+      - display: Echoing hello 1.
+        source: echo hello 1
+        out: {keys: [null, FOO], value: "hello 1"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: hello 1}
+    out:
+      foos:
+        ~(conj:
+        - ~@foos
+        - ~@FOO
+  - module:
+    - name:
+      provides:
+      - FOO
+    - checkpoint:
+      - display: Echoing hello 2.
+        source: echo hello 2
+        out: {keys: [null, FOO], value: "hello 2"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local, out: FOO}
+        user:
+        proxy:
+      env: {FOO: hello 2}
+    out:
+      foos:
+        ~(conj:
+        - ~@foos
+        - ~@FOO
+  child:
+    in:
+      A: "~{#foos}~{.} ~{/foos}"
+    module:
+    - name:
+      requires:
+      - A
+    - checkpoint:
+      - display: "Echoing hello 2 hello 1 hello 0 ."
+        source: "echo hello 2 hello 1 hello 0 "
+        out: {keys: [null, null], value: "hello 2 hello 1 hello 0"}
+        err: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local}
+        user:
+        proxy:
+      env: {}
+
