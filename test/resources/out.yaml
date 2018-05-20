@@ -24,6 +24,7 @@ parent:
     FOO: ~@FOO
   output:
     MY_MSGS: ~@MESSAGES
+    SOMETHING_GROSS: surströmming
 child:
   parent:
     module:
@@ -44,6 +45,7 @@ child:
   child:
     test2: ~@MY_MSGS
     test3: ~@SOMETHING_TASTY
+    test10: ~@SOMETHING_GROSS
     test4: ~@FOO
     # the rest should all be nil
     test5: ~@MESSAGES
