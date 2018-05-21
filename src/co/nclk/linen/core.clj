@@ -10,11 +10,12 @@
             [stencil.core :refer [render]]
             [co.nclk.flax.core :as flax]
             )
-  (:import co.nclk.linen.data.FileDataConnector)
+  (:import co.nclk.linen.data.FileDataConnector
+           clojure.lang.MapEntry)
   (:gen-class))
 
 
-(declare evaluate run-module run-checkpoint extract-env normalize-module)
+(declare evaluate run-module run-checkpoint extract-env normalize-module reduce-outputs)
 
 
 ;; Cheshire encoder for all things Runnable.
@@ -55,7 +56,8 @@
         (let [parent (evaluate (:parent m) config)
               env (extract-env parent (:env config))]
           (merge (evaluate (dissoc m :parent :child) config)
-                 {:parent parent :child (evaluate (:child m) (assoc config :env env))}))
+                 {:parent parent ;;(assoc parent :env env)
+                  :child (evaluate (:child m) (assoc config :env env))}))
 
         ;; Functions and special forms
         (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
@@ -63,16 +65,14 @@
 
         ;; Modules
         (contains? m :module)
-        (let [config (assoc config :env (merge (:env config)
-                                               (evaluate (:input m) config)))
-              module (let [module (:module m)]
+        (let [module (let [module (:module m)]
                        (if (string? module)
                          (resolve-module
                            (:data-connector config)
                            ;; only evaluating a string here:
                            (evaluate module config))
                          module))
-              clean-env (flax/evaluate (:input m) config)]
+              clean-env (reduce-outputs (:input m) {} (:env config))]
           (assoc m :module (run-module module (assoc config :env clean-env))))
 
         ;; Checkpoints
@@ -106,6 +106,43 @@
     :else reports))
 
 
+(defn map-entry
+  [[k v]]
+  (MapEntry. (keyword k) v))
+
+
+(defn normalize-output
+  [p]
+  (if (string? p)
+    {(keyword p) (str "~@" p)}
+
+    (if (map? p)
+      (if (-> p keys set (remove #{:key :value}) empty?)
+        {(keyword (:key p)) (:value p)}
+        (into {} (->> p (map (fn [[k v]] {(keyword k) v}))))
+      ))))
+
+
+(defn reduce-outputs
+  [bindings* env venv]
+  (let [bindings (if (sequential? bindings*) bindings* [bindings*])]
+    (->> bindings
+         (map normalize-output)
+         (reduce #(merge %1 (flax/evaluate %2 (merge %1 venv)))
+                 env))))
+
+
+(defn extract-env-from-module
+  [module outputs* env]
+  (let [[{provides :provides} & body] module
+        cp-envs (harvest body :env)
+        provides-env (reduce (partial reduce-outputs provides) {} cp-envs)
+        next-env (merge env provides-env)]
+    ;(merge env (flax/evaluate outputs* next-env))))
+    (let [x (if (sequential? outputs*) outputs* [outputs*])]
+      (reduce-outputs x env next-env))))
+
+
 (defn extract-env
   [m & [env]]
   (cond
@@ -114,38 +151,12 @@
     (cond
 
       (contains? m :module)
-      (let [[{provides :provides
-              :as header}
-             & body] (:module m)
-            ;;venv (extract-env body env)
-            cp-envs (harvest body :env)
-            provides-env
-            (->> cp-envs
-                 (reduce (fn [venv cp-env]
-                           (->> provides
-                                (map #(if (string? %) {:key % :value ((keyword %) cp-env)} %))
-                                (reduce #(let [value (flax/evaluate (:value %2) (merge %1 cp-env))]
-                                          (assoc %1 (keyword (:key %2)) value))
-                                        venv)))
-                         {}))
-            next-env (merge env provides-env)]
-            ;;next-env
-            ;;(merge env
-            ;;       (->> provides
-            ;;            (map #(if (string? %) {:key % :value ((keyword %) venv)} %))
-            ;;            (reduce #(assoc %1 (keyword (:key %2))
-            ;;                               (flax/evaluate (:value %2) venv))
-            ;;                    {})))]
-        (merge env (evaluate (:output m) next-env)))
+      (let [{:keys [outputs module]} m]
+        (extract-env-from-module module outputs env))
 
 
       (every? #(contains? m %) #{:checkpoint :env})
       (merge env (:env m))
-
-      ;;(contains? m :out)
-      ;;(let [out (evaluate (:out m) {:env env})]
-      ;;  (println "LLLLLLLLLL" out env)
-      ;;  (merge env out))
 
       :else
       (reduce

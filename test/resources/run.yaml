@@ -15,7 +15,7 @@ config:
           source: echo hello
           nodes:
           - stdout: FOO
-      output:
+      outputs:
         obj: ~@OBJ
     child:
       module:
@@ -46,7 +46,7 @@ expected:
         user:
         proxy:
       env: {FOO: "hello"}
-    output: {obj: ~@OBJ}
+    outputs: {obj: ~@OBJ}
   child:
     module:
     - name:
@@ -80,7 +80,7 @@ config:
           source: echo hello
           nodes:
           - stdout: FOO
-      output:
+      outputs:
         obj: ~@OBJ
     child:
       input:
@@ -114,7 +114,7 @@ expected:
         user:
         proxy:
       env: {FOO: "hello"}
-    output: {obj: ~@OBJ}
+    outputs: {obj: ~@OBJ}
   child:
     module:
     - name:
@@ -148,7 +148,7 @@ config:
           source: echo hello
           nodes:
           - stdout: FOO
-      output:
+      outputs:
         foo: ~@FOO
     child:
       input:
@@ -180,7 +180,7 @@ expected:
         user:
         proxy:
       env: {FOO: "hello"}
-    output: {foo: ~@FOO}
+    outputs: {foo: ~@FOO}
   child:
     module:
     - name:
@@ -216,7 +216,7 @@ config:
           source: echo hello
           nodes:
           - stdout: FOO
-      output:
+      outputs:
         foo: ~@FOO
     child:
       input:
@@ -249,7 +249,7 @@ expected:
         user:
         proxy:
       env: {FOO: "hello"}
-    output: {foo: ~@FOO}
+    outputs: {foo: ~@FOO}
   child:
     module:
     - name:
@@ -286,7 +286,7 @@ config:
           source: echo hello
           nodes:
           - stdout: FOO
-      output:
+      outputs:
         foo: ~@FOO
     child:
       input:
@@ -320,7 +320,7 @@ expected:
         user:
         proxy:
       env: {FOO: "hello"}
-    output: {foo: ~@FOO}
+    outputs: {foo: ~@FOO}
   child:
     module:
     - name:
@@ -357,7 +357,7 @@ config:
           source: echo hello
           nodes:
           - stdout: FOO
-      output:
+      outputs:
         foo: ~@FOO
     child:
     - input:
@@ -395,7 +395,7 @@ expected:
         user:
         proxy:
       env: {FOO: "hello"}
-    output: {foo: ~@FOO}
+    outputs: {foo: ~@FOO}
   child:
   - module:
     - name:
@@ -423,7 +423,7 @@ expected:
 ---
 
 label: >-
-  Reducing the output of several modules into a list.
+  Reducing the outputs of several modules into a list.
 env: {}
 config:
   main:
@@ -443,7 +443,7 @@ config:
               nodes:
               - stdout: FOO
           input: {idx: ~@idx}
-          output:
+          outputs:
             foos:
               ~(conj:
               - ~@foos
@@ -479,7 +479,7 @@ expected:
         proxy:
       env: {FOO: hello 0}
     input: {idx: ~@idx}
-    output:
+    outputs:
       foos:
         ~(conj:
         - ~@foos
@@ -502,7 +502,7 @@ expected:
         proxy:
       env: {FOO: hello 1}
     input: {idx: ~@idx}
-    output:
+    outputs:
       foos:
         ~(conj:
         - ~@foos
@@ -525,7 +525,7 @@ expected:
         proxy:
       env: {FOO: hello 2}
     input: {idx: ~@idx}
-    output:
+    outputs:
       foos:
         ~(conj:
         - ~@foos

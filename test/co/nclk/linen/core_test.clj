@@ -137,17 +137,22 @@
         (-> expected (= r) is))))))
 
 (deftest provides
-  (testing (str "`:provides` key is capable of reducing a list of environments "
-                "harvested from checkpoints")
-    (let [module (-> "out.yaml" slurp-test)
-          r (linen/evaluate module (-> base-config (assoc :env {:FOO {:name "bar"}})))]
-      (-> r first :child :test1 ffirst (= "hello bar 0!") is)
-      (-> r first :child :child :test2 first (= "hello bar 0!") is)
+  (let [module (-> "out.yaml" slurp-test)
+        r (linen/evaluate module (-> base-config (assoc :env {:FOO {:name "bar"}})))]
+    ;;(clojure.pprint/pprint r)
+    (testing "Output is visible by `:child` entry."
+      (-> r first :child :test1 ffirst (= "hello bar 0!") is))
+    (testing "Outer output is visible by inner `:child` entry."
+      (-> r first :child :child :test2 first (= "hello bar 0!") is))
+    (testing "Inner parent output is visible to inner child."
       (-> r first :child :child :test3
-          (= "this is a test: hello bar 0! hello bar 1! hello bar 2!") is)
-      (-> r first :child :child :test4 (= {:name "bar"}) is)
-      (-> r first :child :child :test10 (= "surströmming") is)
-      (doseq [x (range 5 10)]
-        (let [k (keyword (str "test" x))]
-          (-> r first :child :child k nil? is)))
-      )))
+          (= "this is a test: hello bar 0! hello bar 1! hello bar 2!") is))
+    (testing "Global environment is visible outside of a module."
+      (-> r first :child :child :test4 (= {:name "bar"}) is))
+    (testing "Output can bind literal values."
+      (-> r first :child :child :test10 (= "surströmming") is))
+    (doseq [x (range 5 10)]
+      (let [k (keyword (str "test" x))]
+        (testing "Inputs and other supposedly invisible bindings are invisible where they should be."
+          (-> r first :child :child k nil? is))))
+    ))
