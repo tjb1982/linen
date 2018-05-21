@@ -9,7 +9,7 @@ parent:
       value:
         ~(conj:
         - ~@MESSAGES
-        - ~@MESSAGE2
+        - ~@MESSAGE1
   - chester:
       june:
         ~(pmap:
@@ -21,10 +21,12 @@ parent:
               - stderr: MESSAGE1
         - ~(range: [0,3]
   input:
-    FOO: ~@FOO
-  output:
+  - FOO
+  outputs:
+  - MESSAGE_TOM: ~@MESSAGE2
     MY_MSGS: ~@MESSAGES
-    SOMETHING_GROSS: surströmming
+  - key: SOMETHING_GROSS
+    value: surströmming
 child:
   parent:
     module:
@@ -38,7 +40,7 @@ child:
           - stdout: BACON
     input:
       IN_MSGS: ~@MY_MSGS
-    output:
+    outputs:
       SOMETHING_TASTY: ~@BACON
   test1:
   - ~@MY_MSGS
