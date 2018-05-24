@@ -23,7 +23,7 @@ config:
       - checkpoint:
           display: Repeating ~{obj.foo}.
           source: echo ~{obj.foo}~{OBJ.foo}
-      input:
+      inputs:
         obj: ~@obj
 expected:
 - name: test1
@@ -57,13 +57,13 @@ expected:
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
       env: {}
-    input:
+    inputs:
       obj: ~@obj
 
 ---
 
 label: >-
-  Hello world with `:provides` using `:then`, having differing structure; then input using
+  Hello world with `:provides` using `:then`, having differing structure; then inputs using
   key as string literal.
 env: {}
 config:
@@ -83,7 +83,7 @@ config:
       outputs:
         obj: ~@OBJ
     child:
-      input:
+      inputs:
         A: "This is the message: ~{obj.foo}"
         obj: ~@obj
       module:
@@ -126,14 +126,14 @@ expected:
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
       env: {}
-    input:
+    inputs:
       A: "This is the message: ~{obj.foo}"
       obj: ~@obj
 
 ---
 
 label: >-
-  Hello world with `:provides` as string literal, using `:then`; then input using
+  Hello world with `:provides` as string literal, using `:then`; then inputs using
   key as map (without default).
 env: {}
 config:
@@ -151,7 +151,7 @@ config:
       outputs:
         foo: ~@FOO
     child:
-      input:
+      inputs:
         A: "This is the message: ~{foo}"
         foo: ~@foo
       module:
@@ -194,14 +194,14 @@ expected:
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
       env: {}
-    input:
+    inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
 
 ---
 
 label: >-
-  Hello world with `:provides` as string literal, using `:then`; then input using
+  Hello world with `:provides` as string literal, using `:then`; then inputs using
   key as map (with unused default).
 env: {}
 config:
@@ -219,7 +219,7 @@ config:
       outputs:
         foo: ~@FOO
     child:
-      input:
+      inputs:
         A: "This is the message: ~{foo}"
         foo: ~@foo
       module:
@@ -264,15 +264,15 @@ expected:
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
       env: {}
-    input:
+    inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
 
 ---
 
 label: >-
-  Hello world with `:provides` as string literal, using `:then`; then input using
-  mixed `:requires` inputs: string and map (map with useful default).
+  Hello world with `:provides` as string literal, using `:then`; then inputs using
+  mixed `:requires` inputss: string and map (map with useful default).
 env: {}
 config:
   main:
@@ -289,7 +289,7 @@ config:
       outputs:
         foo: ~@FOO
     child:
-      input:
+      inputs:
         A: "This is the message: ~{foo}"
         foo: ~@foo
       module:
@@ -336,7 +336,7 @@ expected:
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello lalala"}
       env: {}
-    input:
+    inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
 
@@ -360,7 +360,7 @@ config:
       outputs:
         foo: ~@FOO
     child:
-    - input:
+    - inputs:
         A: "This is the message: ~{foo}"
         foo: ~@foo
       module:
@@ -412,7 +412,7 @@ expected:
         stdout: {keys: [null, null],
                  value: "hello This is the message: hello This is the message: hello lalala"}
       env: {}
-    input:
+    inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
   - this:
@@ -442,7 +442,7 @@ config:
               source: echo hello ~{idx}
               nodes:
               - stdout: FOO
-          input: {idx: ~@idx}
+          inputs: {idx: ~@idx}
           outputs:
             foos:
               ~(conj:
@@ -450,7 +450,7 @@ config:
               - ~@FOO
       - ~(range: [0,3]
     child:
-      input:
+      inputs:
         A: "~{#foos}~{.} ~{/foos}"
       module:
       - requires:
@@ -478,7 +478,7 @@ expected:
         user:
         proxy:
       env: {FOO: hello 0}
-    input: {idx: ~@idx}
+    inputs: {idx: ~@idx}
     outputs:
       foos:
         ~(conj:
@@ -501,7 +501,7 @@ expected:
         user:
         proxy:
       env: {FOO: hello 1}
-    input: {idx: ~@idx}
+    inputs: {idx: ~@idx}
     outputs:
       foos:
         ~(conj:
@@ -524,14 +524,14 @@ expected:
         user:
         proxy:
       env: {FOO: hello 2}
-    input: {idx: ~@idx}
+    inputs: {idx: ~@idx}
     outputs:
       foos:
         ~(conj:
         - ~@foos
         - ~@FOO
   child:
-    input:
+    inputs:
       A: "~{#foos}~{.} ~{/foos}"
     module:
     - name:
