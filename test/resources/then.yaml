@@ -12,7 +12,7 @@ parent:
       - stdout: MESSAGE1
       - stdout: MESSAGE2
       stdout: MESSAGES
-  input:
+  inputs:
     FOO: ~@FOO
   outputs:
     MY_MSG: ~@MESSAGE1
@@ -24,7 +24,7 @@ child:
     - IN_MSGS
   - - checkpoint:
         source: "echo this is a test: ~{IN_MSG} ~{#IN_MSGS}~{{.}} ~{/IN_MSGS}"
-  input:
+  inputs:
     IN_MSG: ~@MY_MSG
     IN_MSGS: ~@MY_MSGS
 - module:

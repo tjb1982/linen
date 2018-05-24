@@ -20,7 +20,7 @@ parent:
               nodes:
               - stderr: MESSAGE1
         - ~(range: [0,3]
-  input:
+  inputs:
   - FOO
   outputs:
   - MESSAGE_TOM: ~@MESSAGE2
@@ -38,7 +38,7 @@ child:
           source: "echo this is a test:~{#IN_MSGS} ~{.}~{/IN_MSGS}"
           nodes:
           - stdout: BACON
-    input:
+    inputs:
       IN_MSGS: ~@MY_MSGS
     outputs:
       SOMETHING_TASTY: ~@BACON

@@ -72,7 +72,7 @@
                            ;; only evaluating a string here:
                            (evaluate module config))
                          module))
-              clean-env (reduce-outputs (:input m) {} (:env config))]
+              clean-env (reduce-outputs (:inputs m) {} (:env config))]
           (assoc m :module (run-module module (assoc config :env clean-env))))
 
         ;; Checkpoints
@@ -114,6 +114,7 @@
 (defn normalize-output
   [p]
   (if (string? p)
+    ;; TODO: something like `(flax/var-str p)`
     {(keyword p) (str "~@" p)}
 
     (if (map? p)
@@ -136,11 +137,10 @@
   [module outputs* env]
   (let [[{provides :provides} & body] module
         cp-envs (harvest body :env)
-        provides-env (reduce (partial reduce-outputs provides) {} cp-envs)
+        provides-env (reduce (partial reduce-outputs provides) {} (or cp-envs [{}]))
         next-env (merge env provides-env)]
-    ;(merge env (flax/evaluate outputs* next-env))))
-    (let [x (if (sequential? outputs*) outputs* [outputs*])]
-      (reduce-outputs x env next-env))))
+    (let [outputs (if (sequential? outputs*) outputs* [outputs*])]
+      (reduce-outputs outputs env next-env))))
 
 
 (defn extract-env
@@ -299,6 +299,8 @@
 
 (defn normalize-require
   [r]
+  ;; TODO: allow {FOO: bar} to be equivalent to {key: FOO, default: bar}
+  ;; also allow dictionary instead of (map normalize-require)
   (if (string? r) {:key r} r))
 
 
@@ -378,6 +380,21 @@
       (map (fn [[k v]] [(keyword k) v]))))
 
 
+(defn clean-up
+  [node-manager & [failed]]
+  (pmap
+    (fn [[k n]]
+      (when (:data n)
+        (let [options (-> @(:data n) :options)]
+        ;; when destroy-on-exit is true, destroy, unless persist-on-failure
+        ;; is true and the test failed.
+        (when (and (-> options :destroy-on-exit true?)
+                   (not (and failed
+                             (-> options :persist-on-failure true?))))
+          (destroy n)))))
+    @(-> node-manager :nodes)))
+
+
 (defn run
   "The entry point for any well-formed program config.
   "
@@ -389,8 +406,14 @@
                              :node-manager (node-manager effective)
                              :genv (or (:genv config) genv)
                              :failed? (atom false))
-        {module :main} config
-        result (run-module module config)]
+        {module :main
+         nm :node-manager
+         failed? :failed?} config
+        result (try (run-module module config)
+                 (finally
+                   (log :info "Cleaning up.")
+                   (clean-up nm @failed?)
+                   (log :info "Done cleaning up.")))]
     (log :info (str "Seed: " (.getTime effective)))
     result))
 

@@ -1,0 +1,8 @@
+parent:
+- module:
+    name: header
+    provides:
+      FOO: bar
+  outputs: FOO
+child:
+- ~@FOO
