@@ -10,15 +10,31 @@ parent:
         ~(conj:
         - ~@MESSAGES
         - ~@MESSAGE1
+    - INNER_CHILD_MODULE
+    - UNPROVIDED
   - chester:
       june:
         ~(pmap:
         - ~(fn:
           - [idx]
-          - checkpoint:
-              source: 1>&2 echo hello ~{FOO.name} ~{idx}!
-              nodes:
-              - stderr: MESSAGE1
+          - - checkpoint:
+                source: 1>&2 echo hello ~{FOO.name} ~{idx}!
+                nodes:
+                - stderr: MESSAGE1
+            - module:
+              - provides:
+                - INNER_CHILD_MODULE
+                ## test13: commented out to demo the opposite functionality
+                #- UNPROVIDED
+              - checkpoint:
+                  source: echo parent can see inner child module.
+                  nodes:
+                  - stdout: INNER_CHILD_MODULE
+              - checkpoint:
+                  source: echo parent cannot see unprovided output.
+                  nodes:
+                  - stdout: UNPROVIDED
+              outputs: [INNER_CHILD_MODULE, UNPROVIDED]
         - ~(range: [0,3]
   inputs:
   - FOO
@@ -27,6 +43,8 @@ parent:
     MY_MSGS: ~@MESSAGES
   - key: SOMETHING_GROSS
     value: surströmming
+  - INNER_CHILD_MODULE
+  - UNPROVIDED
 child:
   parent:
     module:
@@ -44,15 +62,19 @@ child:
       SOMETHING_TASTY: ~@BACON
   test1:
   - ~@MY_MSGS
+  test12:
+  - ~@INNER_CHILD_MODULE
   child:
     test2: ~@MY_MSGS
     test3: ~@SOMETHING_TASTY
     test10: ~@SOMETHING_GROSS
     test4: ~@FOO
+    test11: ~@INNER_CHILD_MODULE
     # the rest should all be nil
     test5: ~@MESSAGES
     test6: ~@MESSAGE2
     test7: ~@MESSAGE1
     test8: ~@IN_MSGS
     test9: ~@BACON
+    test13: ~@UNPROVIDED
 

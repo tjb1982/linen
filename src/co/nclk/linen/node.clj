@@ -207,7 +207,8 @@
                                          :value (str "linen: " total-attempts
                                                      " attempts to ssh to " (:name @node)
                                                      " failed.")}
-                                :exit {:keys (:exit checkpoint) :value 1})
+                                :exit {:keys (:exit checkpoint) :value 1}
+                                :success {:keys (:success checkpoint) :value nil})
               (if-let [resolved-checkpoint
                        (try
                          (let [session (ssh/session
@@ -270,19 +271,21 @@
                                                                  " - ")
                                                             :in instr})]
                                (when *log*
-                                 (log-result (:stdout result)
-                                             (:stderr result)
+                                 (log-result (:out result)
+                                             (:err result)
                                              (:exit result)
                                              (:short-name @node)
                                              (:public_ip @node)
                                              (:runid checkpoint)))
 
                                (assoc checkpoint :stdout {:keys (:stdout checkpoint)
-                                                          :value (:stdout result)}
+                                                          :value (:out result)}
                                                  :stderr {:keys (:stderr checkpoint)
-                                                          :value (:stderr result)}
+                                                          :value (:err result)}
                                                  :exit {:keys (:exit checkpoint)
-                                                        :value (:exit result)}))
+                                                        :value (:exit result)}
+                                                 :success {:keys (:success checkpoint)
+                                                           :value nil}))
 
                              (finally (ssh/disconnect session))))
                          (catch Exception se

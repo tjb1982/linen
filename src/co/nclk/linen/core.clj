@@ -87,20 +87,24 @@
 
 
 (defn harvest
-  [m hkey & [reports]]
+  [m hkey & [blocked reports]]
   (cond
     (map? m)
     (if-let [report ((keyword hkey) m)]
       (conj reports report)
       (reduce
         (fn [reports [k v]]
-          (harvest v hkey reports))
+          ;; TODO: (if-not (k blocked) ... where blocked is like #{:module}
+          ;; should make black-box modules possible by coordinating with parent/child/env
+          (if-not (k blocked)
+            (harvest v hkey blocked reports)
+            reports))
         reports m))
 
     (coll? m)
     (reduce
       (fn [reports x]
-        (harvest x hkey reports))
+        (harvest x hkey blocked reports))
       reports m)
 
     :else reports))
@@ -133,11 +137,17 @@
                  env))))
 
 
+(declare extract-env)
+
 (defn extract-env-from-module
+  "Dealing with a single module, gather the envs from the checkpoints directly owned by
+   this module."
   [module outputs* env]
   (let [[{provides :provides} & body] module
-        cp-envs (harvest body :env)
+        ;; the cp envs directly owned by this module:
+        cp-envs (harvest body :env #{:module})
         provides-env (reduce (partial reduce-outputs provides) {} (or cp-envs [{}]))
+        provides-env (merge provides-env (extract-env body {}))
         next-env (merge env provides-env)]
     (let [outputs (if (sequential? outputs*) outputs* [outputs*])]
       (reduce-outputs outputs env next-env))))
@@ -155,8 +165,8 @@
         (extract-env-from-module module outputs env))
 
 
-      (every? #(contains? m %) #{:checkpoint :env})
-      (merge env (:env m))
+      ;;(every? #(contains? m %) #{:checkpoint :env})
+      ;;(merge env (:env m))
 
       :else
       (reduce
@@ -272,7 +282,9 @@
                         (assoc :node node)
                         (assert-checkpoint node config)))))]
       {:checkpoint return
-       :env (reduce checkpoint-env {} return)}
+       ;; merging (:env config) here allows us to add `provides`
+       ;; that use the inputs from the `requires`
+       :env (merge (:env config) (reduce checkpoint-env {} return))}
       )))
 
 
@@ -382,17 +394,18 @@
 
 (defn clean-up
   [node-manager & [failed]]
-  (pmap
-    (fn [[k n]]
-      (when (:data n)
-        (let [options (-> @(:data n) :options)]
-        ;; when destroy-on-exit is true, destroy, unless persist-on-failure
-        ;; is true and the test failed.
-        (when (and (-> options :destroy-on-exit true?)
-                   (not (and failed
-                             (-> options :persist-on-failure true?))))
-          (destroy n)))))
-    @(-> node-manager :nodes)))
+  (doall
+    (pmap
+      (fn [[k n]]
+        (when (:data n)
+          (let [options (-> @(:data n) :options)]
+          ;; when destroy-on-exit is true, destroy, unless persist-on-failure
+          ;; is true and the test failed.
+          (when (and (-> options :destroy-on-exit true?)
+                     (not (and failed
+                               (-> options :persist-on-failure true?))))
+            (destroy n)))))
+      @(-> node-manager :nodes))))
 
 
 (defn run
