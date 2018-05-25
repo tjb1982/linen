@@ -56,7 +56,7 @@ expected:
         display: Repeating hello.
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
-      env: {}
+      env: {obj: {foo: "hello"}}
     inputs:
       obj: ~@obj
 
@@ -125,7 +125,8 @@ expected:
         source: "echo hello This is the message: hello"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
-      env: {}
+      env: {A: "This is the message: hello",
+            obj: {foo: "hello"}}
     inputs:
       A: "This is the message: ~{obj.foo}"
       obj: ~@obj
@@ -193,7 +194,8 @@ expected:
         source: "echo hello This is the message: hello"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
-      env: {}
+      env: {A: "This is the message: hello",
+            foo: "hello"}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -263,7 +265,8 @@ expected:
         source: "echo hello This is the message: hello"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
-      env: {}
+      env: {A: "This is the message: hello",
+            foo: "hello"}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -335,7 +338,9 @@ expected:
         source: "echo hello This is the message: hello lalala"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello lalala"}
-      env: {}
+      env: {A: "This is the message: hello",
+            B: "lalala",
+            foo: "hello"}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -411,7 +416,9 @@ expected:
         node: {name: local}
         stdout: {keys: [null, null],
                  value: "hello This is the message: hello This is the message: hello lalala"}
-      env: {}
+      env: {A: "This is the message: hello",
+            B: "This is the message: hello lalala",
+            foo: "hello"}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -477,7 +484,7 @@ expected:
         node: {name: local, stdout: FOO}
         user:
         proxy:
-      env: {FOO: hello 0}
+      env: {FOO: hello 0, idx: 0}
     inputs: {idx: ~@idx}
     outputs:
       foos:
@@ -500,7 +507,7 @@ expected:
         node: {name: local, stdout: FOO}
         user:
         proxy:
-      env: {FOO: hello 1}
+      env: {FOO: hello 1, idx: 1}
     inputs: {idx: ~@idx}
     outputs:
       foos:
@@ -523,7 +530,7 @@ expected:
         node: {name: local, stdout: FOO}
         user:
         proxy:
-      env: {FOO: hello 2}
+      env: {FOO: hello 2, idx: 2}
     inputs: {idx: ~@idx}
     outputs:
       foos:
@@ -547,5 +554,5 @@ expected:
         node: {name: local}
         user:
         proxy:
-      env: {}
+      env: {A: "hello 2 hello 1 hello 0 "}
 

@@ -9,6 +9,7 @@ provides:
 
 checkpoint:
   source: echo hello ~{FOO.name}
+  assert: true
   nodes:
   - stdout: MESSAGE
 

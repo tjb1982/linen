@@ -115,7 +115,7 @@ expected:
     node: {name: local}
     user:
     proxy:
-  env: {}
+  env: {FOO: bar}
 
 ---
 
@@ -179,7 +179,7 @@ expected:
     node: {name: local}
     user:
     proxy:
-  env: {}
+  env: {FOO: "bar"}
 
 ---
 

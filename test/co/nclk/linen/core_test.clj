@@ -140,19 +140,25 @@
   (let [module (-> "out.yaml" slurp-test)
         r (linen/evaluate module (-> base-config (assoc :env {:FOO {:name "bar"}})))]
     ;;(clojure.pprint/pprint r)
-    (testing "Output is visible by `:child` entry."
-      (-> r first :child :test1 ffirst (= "hello bar 0!") is))
-    (testing "Outer output is visible by inner `:child` entry."
+    (testing ":test1 Output is visible by `:child` entry."
+      (-> r first :child :test1 first (= '("hello bar 0!", "hello bar 1!", "hello bar 2!")) is))
+    (testing ":test2 Outer output is visible by inner `:child` entry."
       (-> r first :child :child :test2 first (= "hello bar 0!") is))
-    (testing "Inner parent output is visible to inner child."
+    (testing ":test3 Inner parent output is visible to inner child."
       (-> r first :child :child :test3
           (= "this is a test: hello bar 0! hello bar 1! hello bar 2!") is))
-    (testing "Global environment is visible outside of a module."
+    (testing ":test11 Inner child module is visible to outer dependency."
+      (-> r first :child :child :test11 (= "parent can see inner child module.") is))
+    (testing ":test12 Inner child module from parent is visible to children."
+      (-> r first :child :test12 first (= "parent can see inner child module.") is))
+    (testing ":test13 Unprovided output is invisible."
+      (-> r first :child :child :test13 nil? is))
+    (testing ":test4 Global environment is visible outside of a module."
       (-> r first :child :child :test4 (= {:name "bar"}) is))
-    (testing "Output can bind literal values."
+    (testing ":test5—:test10 Output can bind literal values."
       (-> r first :child :child :test10 (= "surströmming") is))
-    (doseq [x (range 5 10)]
-      (let [k (keyword (str "test" x))]
-        (testing "Inputs and other supposedly invisible bindings are invisible where they should be."
+    (doseq [idx (range 5 10)]
+      (let [k (keyword (str "test" idx))]
+        (testing (str "Inputs and other supposedly invisible bindings are invisible where they should be. idx: " idx)
           (-> r first :child :child k nil? is))))
     ))
