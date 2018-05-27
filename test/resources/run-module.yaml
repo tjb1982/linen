@@ -42,7 +42,7 @@ expected:
   requires:
   provides:
   - FOO
-  env: {}
+  env: {FOO: hello}
 - checkpoint:
   - display: Echoing hello
     source: echo hello
@@ -76,7 +76,7 @@ expected:
   requires:
   provides:
   - FOO
-  env: {}
+  env: {FOO: [hello, hello]}
 - checkpoint:
   - &cp
     display: Echoing hello
@@ -94,7 +94,7 @@ expected:
 ---
 
 label: Hello world with requires.
-env: {FOO: "bar"}
+env: {FOO: bar}
 module:
 - name: test1
   requires:
@@ -119,7 +119,7 @@ expected:
     node: {name: local}
     user:
     proxy:
-  env: {FOO: bar}
+  env: {}
 
 ---
 
@@ -144,7 +144,7 @@ expected:
   provides:
   - key: FOO
     value: ~@FOO
-  env: {FOO: bar}
+  env: {FOO: hello bar}
 - checkpoint:
   - display: Echoing hello bar
     source: echo hello bar
@@ -185,7 +185,7 @@ expected:
     node: {name: local}
     user:
     proxy:
-  env: {FOO: "bar"}
+  env: {}
 
 ---
 
@@ -208,7 +208,7 @@ expected:
   provides:
     obj:
       foo: ~@FOO
-  env: {}
+  env: {obj: {foo: "hello"}}
 - checkpoint:
   - display: Echoing hello
     source: echo hello

@@ -29,7 +29,7 @@ expected:
     - name:
       provides:
       - MSG
-      env: {}
+      env: {MSG: hello}
     - checkpoint:
       - &result
         source: echo hello
@@ -51,7 +51,7 @@ expected:
       - <<: *result
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
-      env: {inmsg: "hello"}
+      env: {}
     inputs:
       inmsg: ~@outmsg
 
@@ -90,7 +90,7 @@ expected:
     - name:
       provides:
       - MSG
-      env: {}
+      env: {MSG: hello}
     - checkpoint:
       - &result
         source: echo hello
@@ -122,7 +122,7 @@ expected:
       - <<: *result
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
-      env: {inmsg: "hello"}
+      env: {}
     inputs:
       inmsg: ~@outmsg
 
@@ -139,11 +139,11 @@ config:
       - provides:
           MSG: ~@MSG
       - checkpoint:
+          source: echo not used
+      - checkpoint:
           source: echo hello
           nodes:
           - stdout: MSG
-      - checkpoint:
-          source: echo not used
       outputs:
         outmsg: ~@MSG
     child:
@@ -161,6 +161,16 @@ expected:
     - name:
       provides:
         MSG: ~@MSG
+      env: {MSG: hello}
+    - checkpoint:
+      - source: echo not used
+        stdout: {keys: [null, null], value: "not used"}
+        stderr: {keys: [null, null], value: ""}
+        exit: {keys: [null, null], value: 0}
+        success: {keys: [null, null], value: true}
+        node: {name: local}
+        user:
+        proxy:
       env: {}
     - checkpoint:
       - &result
@@ -173,16 +183,6 @@ expected:
         user:
         proxy:
       env: {MSG: "hello"}
-    - checkpoint:
-      - source: echo not used
-        stdout: {keys: [null, null], value: "not used"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local}
-        user:
-        proxy:
-      env: {}
     outputs: {outmsg: ~@MSG}
   child:
     module:
@@ -193,7 +193,7 @@ expected:
       - <<: *result
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
-      env: {inmsg: "hello"}
+      env: {}
     inputs:
       inmsg: ~@outmsg
 
@@ -234,7 +234,7 @@ expected:
       provides:
         key: MSG
         value: ~@MSG
-      env: {}
+      env: {MSG: hello}
     - checkpoint:
       - &result
         source: echo hello
@@ -266,7 +266,7 @@ expected:
       - <<: *result
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
-      env: {inmsg: "hello"}
+      env: {}
     inputs:
       inmsg: ~@outmsg
 
@@ -312,7 +312,7 @@ expected:
           ~(or:
           - ~@MSG_OBJ
           - greeting: ~@MSG
-      env: {}
+      env: {MSG_OBJ: {greeting: hello}}
     - checkpoint:
       - source: echo not used
         stdout: {keys: [null, null], value: "not used"}
@@ -344,6 +344,7 @@ expected:
       - <<: *result
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
-      env: {inmsg: "hello"}
+      env: {}
     inputs:
       inmsg: ~@outmsg
+

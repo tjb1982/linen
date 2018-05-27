@@ -17,7 +17,7 @@ parent:
     - UNPROVIDED
   - chester:
       june:
-        ~(pmap:
+        ~(map:
         - ~(fn:
           - [idx]
           - parent:
@@ -34,7 +34,7 @@ parent:
             - module:
               - provides:
                 - INNER_CHILD_MODULE
-                ## test13: commented out to demo the opposite functionality
+                ## if this were uncommented, test13 should fail.
                 #- UNPROVIDED
               - checkpoint:
                   source: echo parent can see inner child module.
