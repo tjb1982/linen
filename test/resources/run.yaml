@@ -35,7 +35,7 @@ expected:
       - key: OBJ
         value:
           foo: ~@FOO
-      env: {}
+      env: {OBJ: {foo: hello}}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -59,7 +59,7 @@ expected:
         display: Repeating hello.
         node: {name: local}
         stdout: {keys: [null, null], value: "hello"}
-      env: {obj: {foo: "hello"}}
+      env: {}
     inputs:
       obj: ~@obj
 
@@ -106,7 +106,7 @@ expected:
       - key: OBJ
         value:
           foo: ~@FOO
-      env: {}
+      env: {OBJ: {foo: hello}}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -131,8 +131,7 @@ expected:
         source: "echo hello This is the message: hello"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
-      env: {A: "This is the message: hello",
-            obj: {foo: "hello"}}
+      env: {}
     inputs:
       A: "This is the message: ~{obj.foo}"
       obj: ~@obj
@@ -176,7 +175,7 @@ expected:
     - name:
       provides:
       - FOO
-      env: {}
+      env: {FOO: hello}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -204,8 +203,7 @@ expected:
         source: "echo hello This is the message: hello"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
-      env: {A: "This is the message: hello",
-            foo: "hello"}
+      env: {}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -250,7 +248,7 @@ expected:
     - name:
       provides:
       - FOO
-      env: {}
+      env: {FOO: hello}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -278,8 +276,7 @@ expected:
         source: "echo hello This is the message: hello"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello"}
-      env: {A: "This is the message: hello",
-            foo: "hello"}
+      env: {}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -288,7 +285,7 @@ expected:
 
 label: >-
   Hello world with `:provides` as string literal, using `:then`; then inputs using
-  mixed `:requires` inputss: string and map (map with useful default).
+  mixed `:requires` inputs: string and map (map with useful default).
 env: {}
 config:
   main:
@@ -325,7 +322,7 @@ expected:
     - name:
       provides:
       - FOO
-      env: {}
+      env: {FOO: hello}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -357,9 +354,7 @@ expected:
         source: "echo hello This is the message: hello lalala"
         node: {name: local}
         stdout: {keys: [null, null], value: "hello This is the message: hello lalala"}
-      env: {A: "This is the message: hello",
-            B: "lalala",
-            foo: "hello"}
+      env: {}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -408,7 +403,7 @@ expected:
     - name:
       provides:
       - FOO
-      env: {}
+      env: {FOO: hello}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -440,9 +435,7 @@ expected:
         node: {name: local}
         stdout: {keys: [null, null],
                  value: "hello This is the message: hello This is the message: hello lalala"}
-      env: {A: "This is the message: hello",
-            B: "This is the message: hello lalala",
-            foo: "hello"}
+      env: {}
     inputs:
       A: "This is the message: ~{foo}"
       foo: ~@foo
@@ -499,7 +492,7 @@ expected:
       - FOO
       requires:
       - idx
-      env: {idx: 0}
+      env: {idx: 0, FOO: hello 0}
     - checkpoint:
       - display: Echoing hello 0.
         source: echo hello 0
@@ -510,7 +503,7 @@ expected:
         node: {name: local, stdout: FOO}
         user:
         proxy:
-      env: {FOO: hello 0, idx: 0}
+      env: {FOO: hello 0}
     inputs: {idx: ~@idx}
     outputs:
       foos:
@@ -523,7 +516,7 @@ expected:
       - FOO
       requires:
       - idx
-      env: {idx: 1}
+      env: {idx: 1, FOO: hello 1}
     - checkpoint:
       - display: Echoing hello 1.
         source: echo hello 1
@@ -534,7 +527,7 @@ expected:
         node: {name: local, stdout: FOO}
         user:
         proxy:
-      env: {FOO: hello 1, idx: 1}
+      env: {FOO: hello 1}
     inputs: {idx: ~@idx}
     outputs:
       foos:
@@ -547,7 +540,7 @@ expected:
       - FOO
       requires:
       - idx
-      env: {idx: 2}
+      env: {idx: 2, FOO: hello 2}
     - checkpoint:
       - display: Echoing hello 2.
         source: echo hello 2
@@ -558,7 +551,7 @@ expected:
         node: {name: local, stdout: FOO}
         user:
         proxy:
-      env: {FOO: hello 2, idx: 2}
+      env: {FOO: hello 2}
     inputs: {idx: ~@idx}
     outputs:
       foos:
@@ -583,5 +576,5 @@ expected:
         node: {name: local}
         user:
         proxy:
-      env: {A: "hello 2 hello 1 hello 0 "}
+      env: {}
 

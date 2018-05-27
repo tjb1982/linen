@@ -39,53 +39,6 @@
   ;;(-> tester type (= java.lang.Boolean)))
 
 
-(defn evaluate
-  [m config]
-  (let [config (if (:merge-global-environment config)
-                 (assoc config :env
-                               (merge ((:genv config))
-                                      (:env config)))
-                 config)]
-    (cond
-
-      (map? m)
-      (cond
-
-        ;; Contains :parent/:child dependency
-        (and (contains? m :parent) (contains? m :child))
-        (let [parent (evaluate (:parent m) config)
-              env (extract-env parent (:env config))]
-          (merge (evaluate (dissoc m :parent :child) config)
-                 {:parent parent
-                  :child (evaluate (:child m) (assoc config :env env))}))
-
-        ;; Functions and special forms
-        (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
-        (flax/evaluate m config evaluate)
-
-        ;; Modules
-        (contains? m :module)
-        (let [module (let [module (:module m)]
-                       (if (string? module)
-                         (resolve-module
-                           (:data-connector config)
-                           ;; only evaluating a string here:
-                           (evaluate module config))
-                         module))
-              clean-env (reduce-outputs (:inputs m) {} (:env config))]
-          (assoc m :module (run-module module (assoc config :env clean-env))))
-
-        ;; Checkpoints
-        (contains? m :checkpoint)
-        (run-checkpoint (:checkpoint m) config)
-
-        ;; All other maps
-        :else
-        (flax/evaluate m config evaluate))
-
-      :else (flax/evaluate m config evaluate))))
-
-
 (defn harvest
   [m hkey & [blocked container? reports]]
   (cond
@@ -110,16 +63,16 @@
     :else reports))
 
 
-(defn map-entry
-  [[k v]]
-  (MapEntry. (keyword k) v))
+(defn name-or-nil
+  [x]
+  (try (name x) (catch Throwable t)))
 
 
 (defn normalize-output
   [p]
-  (if (string? p)
+  (if (name-or-nil p)
     ;; TODO: something like `(flax/var-str p)`
-    {(keyword p) (str "~@" p)}
+    {(keyword p) (str "~@" (name p))}
 
     (if (map? p)
       (if (-> p keys set (remove #{:key :value}) empty?)
@@ -137,73 +90,69 @@
                  env))))
 
 
-(declare extract-env)
-
-(defn extract-env-from-module
-  "Dealing with a single module, compile its provided environment, then compile
-   its output environment using the provided environment, returning the result.
-   A module's environment is composed of checkpoint environments and the environments of
-   inner modules."
-  [module outputs* env]
-  (let [[{provides :provides input-env :env name* :name} & body] module
-        ;; the cp envs directly owned by this module:
-        cp-envs (harvest body :env #{:module})
-        mod-envs (map #(extract-env % {}) (harvest body :module #{} true))
-        combined-envs (concat cp-envs mod-envs)
-        provides-env (reduce (partial reduce-outputs provides)
-                             (merge env input-env)
-                             ;; if the body is empty or otherwise doesn't provide any
-                             ;; envs, we still want to run this once to make sure we can
-                             ;; provide the `provides` with whatever `requires`/`inputs`
-                             ;; were given.
-                             (if (empty? combined-envs) [{}] combined-envs))
-        next-env provides-env]
-    (let [outputs (if (sequential? outputs*) outputs* [outputs*])
-      ;; output venv includes outside env for binding, so that the new keys can be 
-      ;; evaluated with awareness of the outside env, and then those new entries get
-      ;; merged into the outside env, which is the return value here.
-          ret (reduce-outputs outputs env (merge env input-env next-env))]
-      (when (contains? #{"opscd/initialize" "lcm/initialize"} name*)
-        (spit "/tmp/debug" (with-out-str
-                             (clojure.pprint/pprint {:module module :env ret})
-                           :append true)))
-      ret
-      )))
+(defn extract-module-env
+  [provides & [body input-env]]
+  (let [envs* (harvest body :env #{:env})
+        envs (if (empty? envs*) [{}] envs*)
+        input-env (if-not (map? input-env) {} input-env)
+        ret (reduce (partial reduce-outputs provides) input-env envs)]
+    ret
+    ))
 
 
-(defn extract-env
-  [m & [env]]
-  (cond
+(defn extract-parent-env
+  [m env]
+  (let [envs (harvest m :env #{:env})]
+    (merge env (reduce merge envs))))
 
-    (map? m)
+
+(defn evaluate
+  [m config]
+  (let [config (if (:merge-global-environment config)
+                 (assoc config :env
+                               (merge ((:genv config))
+                                      (:env config)))
+                 config)]
     (cond
 
-      ;; TODO: pre-compiled environment from parent/child for efficiency
-      ;(contains? m :extracted-env)
-      ;(:extracted-env m)
+      (map? m)
+      (cond
 
-      (contains? m :module)
-      (let [{:keys [outputs module]} m]
-        (extract-env-from-module module outputs env))
+        ;; Contains :parent/:child dependency
+        (and (contains? m :parent) (contains? m :child))
+        (let [parent (evaluate (:parent m) config)
+              env (extract-parent-env parent (:env config))]
+          (merge (evaluate (dissoc m :parent :child) config)
+                 {:parent parent
+                  :child (evaluate (:child m) (assoc config :env env))}))
 
-      ;; TODO: this might be okay after all, since checkpoints inside of modules won't be seen.
-      ;; So this would refer to rogue checkpoints in the parent's body. Caveat emptor.
-      ;;(every? #(contains? m %) #{:checkpoint :env})
-      ;;(merge env (:env m))
+        ;; Functions and special forms
+        (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
+        (flax/evaluate m config evaluate)
 
-      :else
-      (reduce
-        (fn [env [k v]]
-          (merge env (extract-env v env)))
-        env m))
+        ;; Modules
+        (contains? m :module)
+        (let [{:keys [module inputs outputs]} m
+              module (if-let [module-name (name-or-nil module)]
+                       (resolve-module
+                         (:data-connector config)
+                         (evaluate module-name config))
+                       module)
+              clean-env (reduce-outputs inputs {} (:env config))
+              resolved-module (run-module module (assoc config :env clean-env))
+              {provided-env :env} resolved-module
+              output-env (reduce-outputs outputs {} (merge (:env config) provided-env))]
+          (assoc m :module (assoc resolved-module :env output-env)))
 
-    (coll? m)
-    (reduce
-      (fn [env x]
-        (extract-env x env))
-      env m)
+        ;; Checkpoints
+        (contains? m :checkpoint)
+        (run-checkpoint (:checkpoint m) config)
 
-    :else env))
+        ;; All other maps
+        :else
+        (flax/evaluate m config evaluate))
+
+      :else (flax/evaluate m config evaluate))))
 
 
 (defn assert-checkpoint
@@ -307,7 +256,10 @@
       {:checkpoint return
        ;; merging (:env config) here allows us to add `provides`
        ;; that use the inputs from the `requires`
-       :env (merge (:env config) (reduce checkpoint-env {} return))}
+       ;; XXX: it's not appropriate to include the module env here, right? We can do that at
+       ;; the Module level.
+       ;:env (merge (:env config) (reduce checkpoint-env {} return))}
+       :env (reduce checkpoint-env {} return)}
       )))
 
 
@@ -336,17 +288,19 @@
   [r]
   ;; TODO: allow {FOO: bar} to be equivalent to {key: FOO, default: bar}
   ;; also allow dictionary instead of (map normalize-require)
+  ;; i.e., this should behave more like the `provides`/`outputs`
   (if (string? r) {:key r} r))
 
 
 (defn run-module
   "Runs a given module and config.
   "
-  [module* {env* :env :or {env* {}} :as config}]
-  (when (runnable? config)
+  [module* {env* :env :or {env* {}} :as config*}]
+  (when (runnable? config*)
     (let [module (normalize-module module*)
           [{name* :name
             requires* :requires
+            provides :provides
             :as header} & body] module
           requires (map normalize-require requires*)
           requires-keyset (->> requires (map :key) (map keyword) set)
@@ -362,14 +316,16 @@
         (throw (IllegalArgumentException.
                  (str "Linen: module \"" name* "\" is missing inputs: " (set missing)))))
 
-      (let [default-env (->> default-requires
-                             (map (fn [{:keys [key default]}] [(keyword key) default]))
-                             (into {}))
-            env (merge (evaluate default-env config) env)
-            config (assoc config :env env)]
-        ;; below shouldn't be necessary because it effectively happens for each checkpoint
-        ;; cf. bottom of `run-checkpoint`
-        (flatten [(assoc header :env env) (evaluate body config)]))
+      (let [default-env (-> (->> default-requires
+                                 (map (fn [{:keys [key default]}] [(keyword key) default]))
+                                 (into {}))
+                            (evaluate config*))
+            input-env (merge default-env env)
+            config (assoc config* :env input-env)
+            resolved-body (evaluate body config)
+            output-env (extract-module-env provides resolved-body input-env)]
+        ;;(flatten [(assoc header :env output-env) resolved-body]))
+        {:header header :env output-env :body resolved-body})
         ;(flatten [header (evaluate body config)]))
       )))
 
