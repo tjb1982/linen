@@ -56,7 +56,7 @@
         (let [parent (evaluate (:parent m) config)
               env (extract-env parent (:env config))]
           (merge (evaluate (dissoc m :parent :child) config)
-                 {:parent parent ;;(assoc parent :env env)
+                 {:parent parent
                   :child (evaluate (:child m) (assoc config :env env))}))
 
         ;; Functions and special forms
@@ -87,24 +87,24 @@
 
 
 (defn harvest
-  [m hkey & [blocked reports]]
+  [m hkey & [blocked container? reports]]
   (cond
     (map? m)
     (if-let [report ((keyword hkey) m)]
-      (conj reports report)
+      (conj reports (if container? m report))
       (reduce
         (fn [reports [k v]]
           ;; TODO: (if-not (k blocked) ... where blocked is like #{:module}
           ;; should make black-box modules possible by coordinating with parent/child/env
           (if-not (k blocked)
-            (harvest v hkey blocked reports)
+            (harvest v hkey blocked container? reports)
             reports))
         reports m))
 
     (coll? m)
     (reduce
       (fn [reports x]
-        (harvest x hkey blocked reports))
+        (harvest x hkey blocked container? reports))
       reports m)
 
     :else reports))
@@ -140,17 +140,35 @@
 (declare extract-env)
 
 (defn extract-env-from-module
-  "Dealing with a single module, gather the envs from the checkpoints directly owned by
-   this module."
+  "Dealing with a single module, compile its provided environment, then compile
+   its output environment using the provided environment, returning the result.
+   A module's environment is composed of checkpoint environments and the environments of
+   inner modules."
   [module outputs* env]
-  (let [[{provides :provides} & body] module
+  (let [[{provides :provides input-env :env name* :name} & body] module
         ;; the cp envs directly owned by this module:
         cp-envs (harvest body :env #{:module})
-        provides-env (reduce (partial reduce-outputs provides) {} (or cp-envs [{}]))
-        provides-env (merge provides-env (extract-env body {}))
-        next-env (merge env provides-env)]
-    (let [outputs (if (sequential? outputs*) outputs* [outputs*])]
-      (reduce-outputs outputs env next-env))))
+        mod-envs (map #(extract-env % {}) (harvest body :module #{} true))
+        combined-envs (concat cp-envs mod-envs)
+        provides-env (reduce (partial reduce-outputs provides)
+                             (merge env input-env)
+                             ;; if the body is empty or otherwise doesn't provide any
+                             ;; envs, we still want to run this once to make sure we can
+                             ;; provide the `provides` with whatever `requires`/`inputs`
+                             ;; were given.
+                             (if (empty? combined-envs) [{}] combined-envs))
+        next-env provides-env]
+    (let [outputs (if (sequential? outputs*) outputs* [outputs*])
+      ;; output venv includes outside env for binding, so that the new keys can be 
+      ;; evaluated with awareness of the outside env, and then those new entries get
+      ;; merged into the outside env, which is the return value here.
+          ret (reduce-outputs outputs env (merge env input-env next-env))]
+      (when (contains? #{"opscd/initialize" "lcm/initialize"} name*)
+        (spit "/tmp/debug" (with-out-str
+                             (clojure.pprint/pprint {:module module :env ret})
+                           :append true)))
+      ret
+      )))
 
 
 (defn extract-env
@@ -160,11 +178,16 @@
     (map? m)
     (cond
 
+      ;; TODO: pre-compiled environment from parent/child for efficiency
+      ;(contains? m :extracted-env)
+      ;(:extracted-env m)
+
       (contains? m :module)
       (let [{:keys [outputs module]} m]
         (extract-env-from-module module outputs env))
 
-
+      ;; TODO: this might be okay after all, since checkpoints inside of modules won't be seen.
+      ;; So this would refer to rogue checkpoints in the parent's body. Caveat emptor.
       ;;(every? #(contains? m %) #{:checkpoint :env})
       ;;(merge env (:env m))
 
@@ -344,7 +367,10 @@
                              (into {}))
             env (merge (evaluate default-env config) env)
             config (assoc config :env env)]
-        (flatten [header (evaluate body config)]))
+        ;; below shouldn't be necessary because it effectively happens for each checkpoint
+        ;; cf. bottom of `run-checkpoint`
+        (flatten [(assoc header :env env) (evaluate body config)]))
+        ;(flatten [header (evaluate body config)]))
       )))
 
 

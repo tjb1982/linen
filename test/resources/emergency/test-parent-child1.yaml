@@ -1,0 +1,12 @@
+name: |
+  Parent should import exported value from another module, and they should be available
+  to child checkpoints.
+
+---
+
+parent:
+- {module: emergency/modules/hello-world, outputs: message, inputs: {message: "world"}}
+child:
+- checkpoint:
+    source: "echo ~{message} is the message"
+

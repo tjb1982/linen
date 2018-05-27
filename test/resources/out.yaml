@@ -7,9 +7,12 @@ parent:
       value: ~@MESSAGE1
     - key: MESSAGES
       value:
-        ~(conj:
-        - ~@MESSAGES
+        ~(if:
         - ~@MESSAGE1
+        - ~(conj:
+          - ~@MESSAGES
+          - ~@MESSAGE1
+        - ~@MESSAGES
     - INNER_CHILD_MODULE
     - UNPROVIDED
   - chester:
@@ -17,10 +20,17 @@ parent:
         ~(pmap:
         - ~(fn:
           - [idx]
-          - - checkpoint:
+          - parent:
+            - checkpoint:
                 source: 1>&2 echo hello ~{FOO.name} ~{idx}!
                 nodes:
                 - stderr: MESSAGE1
+            child:
+            - checkpoint:
+                source: echo lalalalaalala
+                nodes:
+                - stdout: RACHEL
+
             - module:
               - provides:
                 - INNER_CHILD_MODULE
@@ -35,7 +45,21 @@ parent:
                   nodes:
                   - stdout: UNPROVIDED
               outputs: [INNER_CHILD_MODULE, UNPROVIDED]
+
         - ~(range: [0,3]
+  - module:
+    - provides:
+      - INNER_CHILD_MODULE2
+    - checkpoint:
+        source: echo parent can see inner child module 2.
+        nodes:
+        - stdout: INNER_CHILD_MODULE2
+    - checkpoint:
+        source: echo parent cannot see unprovided output 2.
+        nodes:
+        - stdout: UNPROVIDED
+    outputs: [INNER_CHILD_MODULE2, UNPROVIDED]
+
   inputs:
   - FOO
   outputs:

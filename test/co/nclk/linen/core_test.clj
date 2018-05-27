@@ -2,10 +2,15 @@
   (:require [clojure.test :refer :all]
             [clj-yaml.core :as yaml]
             [co.nclk.linen.node :refer [node-manager]]
-            [co.nclk.linen.data :refer [connector]]
+            ;;[co.nclk.linen.data :refer [connector]]
+            [co.nclk.linen.connector.handler :refer [connector]]
             [co.nclk.linen.core :as linen]))
 
-(def conn (connector))
+(def res-conn
+  (let [handler 
+        (fn [s]
+          (-> s (str ".yaml") clojure.java.io/resource slurp yaml/parse-all))]
+    (connector handler handler)))
 
 (defn slurp-test
   [name*]
@@ -17,6 +22,7 @@
 (def base-config
   {:effective seed
    :node-manager (node-manager seed)
+   :data-connector res-conn
    :failed? (atom false)})
 
 
@@ -128,13 +134,22 @@
       (testing label
         (-> expected (= r) is))))))
 
-(deftest run-test
-  (let [test-cases (-> "run.yaml" slurp-test)]
+(defn do-run-test
+  [res & [pprint?]]
+  (let [test-cases (-> res slurp-test)]
     (doseq [tcidx (range 0 (count test-cases))]
-      (let [{:keys [label env config expected]} (nth test-cases tcidx)
+      (let [{:keys [label config expected]} (nth test-cases tcidx)
             r (-> base-config (merge config) linen/run rm-dynamic-keys)]
+      (when pprint?
+        (clojure.pprint/pprint r))
       (testing label
         (-> expected (= r) is))))))
+
+(deftest run-test
+  (do-run-test "run.yaml"))
+
+(deftest run2-test
+  (do-run-test "run2.yaml"))
 
 (deftest provides
   (let [module (-> "out.yaml" slurp-test)
@@ -162,3 +177,4 @@
         (testing (str "Inputs and other supposedly invisible bindings are invisible where they should be. idx: " idx)
           (-> r first :child :child k nil? is))))
     ))
+

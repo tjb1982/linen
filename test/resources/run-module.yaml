@@ -11,6 +11,7 @@ expected:
 - name: test1
   requires:
   provides:
+  env: {}
 - checkpoint:
   - <<: *cp
     stdout: {keys: [null, null], value: "hello"}
@@ -41,6 +42,7 @@ expected:
   requires:
   provides:
   - FOO
+  env: {}
 - checkpoint:
   - display: Echoing hello
     source: echo hello
@@ -74,6 +76,7 @@ expected:
   requires:
   provides:
   - FOO
+  env: {}
 - checkpoint:
   - &cp
     display: Echoing hello
@@ -105,6 +108,7 @@ expected:
   requires:
   - FOO
   provides:
+  env: {FOO: bar}
 - checkpoint:
   - display: Echoing hello bar
     source: echo hello bar
@@ -140,6 +144,7 @@ expected:
   provides:
   - key: FOO
     value: ~@FOO
+  env: {FOO: bar}
 - checkpoint:
   - display: Echoing hello bar
     source: echo hello bar
@@ -169,6 +174,7 @@ expected:
   requires:
   - key: FOO
     default: bar
+  env: {FOO: bar}
 - checkpoint:
   - display: Echoing hello bar
     source: echo hello bar
@@ -202,6 +208,7 @@ expected:
   provides:
     obj:
       foo: ~@FOO
+  env: {}
 - checkpoint:
   - display: Echoing hello
     source: echo hello
@@ -229,6 +236,7 @@ module:
       - ~(=: [~@out, "hello"]
 expected:
 - name: test1
+  env: {}
 - checkpoint:
   - <<: *cp
     stdout: {keys: [null, null], value: "hello"}
@@ -255,6 +263,7 @@ module:
       - ~(clojure.string/blank?: [~@out]
 expected:
 - name: test1
+  env: {}
 - checkpoint:
   - <<: *cp
     stdout: {keys: [null, null], value: "hello"}
