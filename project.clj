@@ -15,7 +15,8 @@
                  ]
   :profiles {:dev {:dependencies [[pjstadig/humane-test-output "0.8.3"]]
                    :injections [(require 'pjstadig.humane-test-output)
-                                (pjstadig.humane-test-output/activate!)]
-                   :resource-paths ["test/resources"]}}
+                                (pjstadig.humane-test-output/activate!)
+                                (require '[co.nclk.linen.core :as linen] '[co.nclk.linen.core-test :refer :all])]
+                   :resource-paths ["test/resources", "/home/tjb1982/nclk/them/datastax/yar/q/qapi/resources/linen"]}}
   :aot :all
   :main co.nclk.linen.core)

@@ -27,6 +27,7 @@ config:
         obj: ~@obj
 expected:
 - name: test1
+  env: {}
 - parent:
     module:
     - name:
@@ -34,6 +35,7 @@ expected:
       - key: OBJ
         value:
           foo: ~@FOO
+      env: {}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -51,6 +53,7 @@ expected:
     module:
     - name:
       requires: [obj]
+      env: {obj: {foo: "hello"}}
     - checkpoint:
       - <<: *result
         display: Repeating hello.
@@ -95,6 +98,7 @@ config:
           source: echo ~{obj.foo} ~{A}~{OBJ.foo}
 expected:
 - name: test1
+  env: {}
 - parent:
     module:
     - name:
@@ -102,6 +106,7 @@ expected:
       - key: OBJ
         value:
           foo: ~@FOO
+      env: {}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -119,6 +124,7 @@ expected:
     module:
     - name:
       requires: [A, obj]
+      env: {A: "This is the message: hello", obj: {foo: "hello"}}
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello."
@@ -164,11 +170,13 @@ config:
           source: echo ~{foo} ~{A}~{FOO}
 expected:
 - name: test1
+  env: {}
 - parent:
     module:
     - name:
       provides:
       - FOO
+      env: {}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -188,6 +196,8 @@ expected:
       requires:
       - key: A
       - foo
+      env: {A: "This is the message: hello",
+            foo: "hello"}
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello."
@@ -234,11 +244,13 @@ config:
           source: echo ~{foo} ~{A}~{FOO}
 expected:
 - name: test1
+  env: {}
 - parent:
     module:
     - name:
       provides:
       - FOO
+      env: {}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -259,6 +271,7 @@ expected:
       - key: A
         default: lalala
       - foo
+      env: {A: "This is the message: hello", foo: "hello"}
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello."
@@ -306,11 +319,13 @@ config:
           source: echo ~{foo} ~{A}~{FOO} ~{B}
 expected:
 - name: test1
+  env: {}
 - parent:
     module:
     - name:
       provides:
       - FOO
+      env: {}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -332,6 +347,10 @@ expected:
       - key: B
         default: lalala
       - foo
+      env:
+        A: "This is the message: hello"
+        B: "lalala"
+        foo: "hello"
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello lalala."
@@ -383,11 +402,13 @@ config:
             test: ~@foo
 expected:
 - name: test1
+  env: {}
 - parent:
     module:
     - name:
       provides:
       - FOO
+      env: {}
     - checkpoint:
       - &result
         display: Echoing hello
@@ -409,6 +430,9 @@ expected:
       - key: B
         default: ~{A} lalala
       - foo
+      env: {A: "This is the message: hello",
+            B: "This is the message: hello lalala",
+            foo: "hello"}
     - checkpoint:
       - <<: *result
         display: "Repeating hello and This is the message: hello This is the message: hello lalala."
@@ -467,6 +491,7 @@ config:
           source: echo ~{A}
 expected:
 - name: test1
+  env: {}
 - parent:
   - module:
     - name:
@@ -474,6 +499,7 @@ expected:
       - FOO
       requires:
       - idx
+      env: {idx: 0}
     - checkpoint:
       - display: Echoing hello 0.
         source: echo hello 0
@@ -497,6 +523,7 @@ expected:
       - FOO
       requires:
       - idx
+      env: {idx: 1}
     - checkpoint:
       - display: Echoing hello 1.
         source: echo hello 1
@@ -520,6 +547,7 @@ expected:
       - FOO
       requires:
       - idx
+      env: {idx: 2}
     - checkpoint:
       - display: Echoing hello 2.
         source: echo hello 2
@@ -544,6 +572,7 @@ expected:
     - name:
       requires:
       - A
+      env: {A: "hello 2 hello 1 hello 0 "}
     - checkpoint:
       - display: "Echoing hello 2 hello 1 hello 0 ."
         source: "echo hello 2 hello 1 hello 0 "
