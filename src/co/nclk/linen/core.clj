@@ -3,8 +3,8 @@
             [cheshire.core :as json]
             [cheshire.generate :refer [add-encoder encode-str]]
             [clojure.pprint :refer [pprint]]
-            [clojure.tools.logging :refer [log]]
-            [co.nclk.linen.node :refer [invoke destroy node-manager]]
+            [clojure.tools.logging :as logging]
+            [co.nclk.linen.node :refer [invoke destroy node-manager log]]
             [co.nclk.linen.data :refer [resolve-module resolve-program]]
             [stencil.parser :refer [parse]]
             [stencil.core :refer [render]]
@@ -171,10 +171,8 @@
       (log :debug (with-out-str (clojure.pprint/pprint resolved)))
       (log :error (str "[" (:runid resolved) "] Failed.")))
 
- 
-    (when (and (:log-checkpoints? config)
-               (:runid resolved))
-      (log :checkpoint resolved))
+    (when-let [handler (-> config :callbacks :checkpoint :finished)]
+      (handler resolved))
 
     (if (true? success)
       resolved
@@ -219,14 +217,23 @@
     {:name "local"}))
 
 
+(defn log-checkpoint-started
+  [config checkpoint]
+  (when-let [handler (-> config :callbacks :checkpoint :started)]
+    (handler checkpoint)))
+
+
 (defn run-checkpoint-node
   "Run a given checkpoint and config on a given node.
   "
   [checkpoint node config]
-  (-> config
-      :node-manager
-      (invoke (checkpoint-node checkpoint node) node)
-      (assert-checkpoint node config)))
+  (let [cpn (checkpoint-node checkpoint node)]
+    (log-checkpoint-started config cpn)
+
+    (-> config
+        :node-manager
+        (invoke (checkpoint-node checkpoint node) node)
+        (assert-checkpoint node config))))
 
 
 (defn run-checkpoint
@@ -247,9 +254,10 @@
             ;; Run it on the local host, returning a list as if it were run on
             ;; potentially several nodes.
             (list (let [node (normalized-node)]
+                    (log-checkpoint-started config (checkpoint-node checkpoint node))
                     (-> (or (:node-manager config)
                             ;; TODO: why wouldn't there be a node-manager here?
-                            (node-manager (:effective config)))
+                            (node-manager (:effective config) (:callbacks config)))
                         (invoke (checkpoint-node checkpoint nil) node)
                         (assoc :node node)
                         (assert-checkpoint node config)))))]
@@ -395,20 +403,23 @@
   "
   [config]
   (config-pre-check config)
-  (let [effective (java.util.Date. (long (:effective config)))
-        config (assoc config :effective effective
-                             :runnable? (atom true)
-                             :node-manager (node-manager effective)
-                             :genv (or (:genv config) genv)
-                             :failed? (atom false))
-        {module :main
-         nm :node-manager
-         failed? :failed?} config
-        result (try (run-module module config)
-                 (finally
-                   (log :info "Cleaning up.")
-                   (clean-up nm @failed?)
-                   (log :info "Done cleaning up.")))]
-    (log :info (str "Seed: " (.getTime effective)))
-    result))
+  (let [{callbacks :callbacks} config]
+
+    (let [effective (java.util.Date. (long (:effective config)))
+          config (assoc config :effective effective
+                               :runnable? (atom true)
+                               :node-manager (node-manager effective callbacks)
+                               :genv (or (:genv config) genv)
+                               :failed? (atom false))
+          {module :main
+           nm :node-manager
+           failed? :failed?} config
+          _ (log :info (str "Seed: " (.getTime effective)))
+          result (try (run-module module config)
+                   (finally
+                     (log :info "Cleaning up.")
+                     (clean-up nm @failed?)
+                     (log :info "Done cleaning up.")))]
+      (log :info (str "Seed: " (.getTime effective)))
+      result)))
 

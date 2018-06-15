@@ -1,22 +1,23 @@
 (ns co.nclk.linen.node
-  (:require [clojure.tools.logging :refer [log]]
+  (:require [clojure.tools.logging :as logging]
             [clj-ssh.ssh :as ssh])
   (:import com.jcraft.jsch.JSch
            com.jcraft.jsch.Logger
            clj_ssh.ssh.SshLogger)
   (:gen-class))
 
+
 (JSch/setLogger (SshLogger. Logger/ERROR))
 
 (defprotocol PNode
-  (proxy [self config])
-  (create [self node full-name])
+  (proxy [self checkpoint])
+  (create [self node full-name runid])
   (destroy [self])
   (clone [self]))
 
 
 (defprotocol PNodeManager
-  (get-node [self node])
+  (get-node [self node runid])
   (invoke [self node-label checkpoint])
   (full-node-name [self node])
   (remove-node [self node])
@@ -28,8 +29,23 @@
 
 
 (defn node-log-str
-  [node-name ip runid & more]
-  (str "[" node-name (if ip (str " (" ip ")") "") ": " runid "] " (apply str more)))
+  [node-name ip runid message]
+  (str "[" node-name (if ip (str " (" ip ")") "") ": " runid "] " message))
+
+
+(defn log*
+  ([callbacks level msg]
+    (log* callbacks level nil nil nil msg))
+  ([callbacks level node-name ip runid & more]
+    (if-let [handler (-> callbacks :log)]
+      (if-not (and node-name runid)
+        (handler level nil (apply str more))
+        (handler level runid (node-log-str node-name ip runid (apply str more))))
+      (logging/log level (node-log-str node-name ip runid (apply str more))))))
+
+
+(def ^:dynamic log
+  (partial log* nil))
 
 
 (defn node-error
@@ -49,7 +65,7 @@
 
 (defrecord LocalNode []
   PNode
-  (create [self node full-name] self)
+  (create [self node full-name runid] self)
   (destroy [self] nil)
   (clone [self] self))
 
@@ -57,10 +73,9 @@
 (defn log-result
   [out err exit node-name ip runid]
   (when-not (clojure.string/blank? out)
-    (log :debug (node-log-str node-name ip runid "stdout: " (clojure.string/trim out))))
+    (log :debug node-name ip runid "stdout: " (clojure.string/trim out)))
   (when-not (clojure.string/blank? err)
-    (log :debug
-      (node-log-str node-name ip runid "stderr: " (clojure.string/trim err)))))
+    (log :debug node-name ip runid "stderr: " (clojure.string/trim err))))
 
 (defn tempfile-name
   [& [local]]
@@ -129,26 +144,20 @@
                       stderr (clojure.java.io/reader (.getErrorStream proc))]
 
                   (when *log*
+
                     (when (:display checkpoint)
-                      (log :info (node-log-str
-                                   "local"
-                                   nil
-                                   (:runid checkpoint)
-                                   (clojure.string/trim (:display checkpoint)))))
-                    (log :debug (node-log-str
-                                  "local"
-                                  nil
-                                  (:runid checkpoint)
-                                  (clojure.string/join " " argv)))
+                      (log :info "local" nil (:runid checkpoint)
+                           (clojure.string/trim (:display checkpoint))))
+
+                    (log :debug "local" nil (:runid checkpoint)
+                         (clojure.string/join " " argv))
+
                     (when-not proxy?
-                      (log :debug (node-log-str
-                                    "local"
-                                    nil
-                                    (:runid checkpoint)
-                                    "Contents of "
-                                    tmpfile-name
-                                    ":\n"
-                                    (:source checkpoint)))))
+                      (log :debug "local" nil (:runid checkpoint)
+                           "Contents of "
+                           tmpfile-name
+                           ":\n"
+                           (:source checkpoint))))
 
                   (let [[out err]
                         (for [stream [stdout stderr]]
@@ -158,11 +167,7 @@
                                 (if (nil? line)
                                   lines
                                   (do
-                                    (log :debug (node-log-str
-                                                  "local"
-                                                  nil
-                                                  (:runid checkpoint)
-                                                  line))
+                                    (log :debug "local" nil (:runid checkpoint) line)
                                     (recur (conj lines line))))))))
                         exit (.waitFor proc)
                         out (clojure.string/join "\n" @out)
@@ -193,116 +198,120 @@
 (defn- invoke-remote
   [checkpoint node]
   (if (:proxy checkpoint)
-    (invoke-local checkpoint (proxy node (:proxy checkpoint)))
-    (if (:source checkpoint)
-      (binding [*log* (not (false? (:log checkpoint)))
-                *level* (or (:log checkpoint) :info)]
-        (let [node (:data node)
-              agent (:ssh-agent @node)
-              total-attempts 3]
-          (loop [remaining-attempts total-attempts]
-            (if (zero? remaining-attempts)
-              (assoc checkpoint :stdout {:keys (:stdout checkpoint) :value ""}
-                                :stderr {:keys (:stderr checkpoint)
-                                         :value (str "linen: " total-attempts
-                                                     " attempts to ssh to " (:name @node)
-                                                     " failed.")}
-                                :exit {:keys (:exit checkpoint) :value 1}
-                                :success {:keys (:success checkpoint) :value nil})
-              (if-let [resolved-checkpoint
-                       (try
-                         (let [session (ssh/session
-                                         agent
-                                         (:public_ip @node)
-                                         {:strict-host-key-checking :no
-                                          :log-level :quiet
-                                          :user-known-hosts-file
-                                          (or (-> @node
-                                                  :options
-                                                  :user-known-hosts-file)
-                                              "/dev/null")
-                                          :username (-> @node :options :user)})]
-                           (when (and *log*
-                                      (not (clojure.string/blank?
-                                             (:display checkpoint))))
-                             (log :info
-                               (node-log-str (:short-name @node)
+    (invoke-local checkpoint (proxy node checkpoint))
+    (let [node (:data node)]
+      (if-not (:source checkpoint)
+        (assoc checkpoint :public_ip (:public_ip @node)
+                          :stdout {:keys (:stdout checkpoint)
+                                   :value ""}
+                          :stderr {:keys (:stderr checkpoint)
+                                   :value ""}
+                          :exit {:keys (:exit checkpoint)
+                                 :value 0}
+                          :success {:keys (:success checkpoint)
+                                    :value nil})
+        (binding [*log* (not (false? (:log checkpoint)))
+                  *level* (or (:log checkpoint) :info)]
+          (let [agent (:ssh-agent @node)
+                total-attempts 3]
+            (loop [remaining-attempts total-attempts]
+              (if (zero? remaining-attempts)
+                (assoc checkpoint :stdout {:keys (:stdout checkpoint) :value ""}
+                                  :stderr {:keys (:stderr checkpoint)
+                                           :value (str "linen: " total-attempts
+                                                       " attempts to ssh to " (:name @node)
+                                                       " failed.")}
+                                  :exit {:keys (:exit checkpoint) :value 1}
+                                  :success {:keys (:success checkpoint) :value nil})
+                (if-let [resolved-checkpoint
+                         (try
+                           (let [session (ssh/session
+                                           agent
+                                           (:public_ip @node)
+                                           {:strict-host-key-checking :no
+                                            :log-level :quiet
+                                            :user-known-hosts-file
+                                            (or (-> @node
+                                                    :options
+                                                    :user-known-hosts-file)
+                                                "/dev/null")
+                                            :username (-> @node :options :user)})]
+
+                             (when (and *log*
+                                        (not (clojure.string/blank?
+                                               (:display checkpoint))))
+                               (log :info (:short-name @node) (:public_ip @node) (:runid checkpoint)
+                                    (clojure.string/trim
+                                      (:display checkpoint))))
+
+                             (try
+
+                               (when-not (ssh/connected? session)
+                                 (ssh/connect session
+                                              (or (-> @node :options :timeout)
+                                                  (* 60 1000))))
+
+                               (when *log*
+                                 (log :debug (:short-name @node)
                                              (:public_ip @node)
                                              (:runid checkpoint)
                                              (clojure.string/trim
-                                               (:display checkpoint)))))
+                                               (:source checkpoint))))
 
-                           (try
+;;                               (let [result (ssh/ssh session {:cmd
+;;                                                              (str "sudo su "
+;;                                                                   (or (:user checkpoint)
+;;                                                                       "root")
+;;                                                                   " - ")
+;;                                                              :in (:source checkpoint)})]
+                               (let [tmpfile-name (str "./" (tempfile-name false))
+                                     terminator (:runid checkpoint)
+                                     instr (str "cat <<-" terminator " > " tmpfile-name
+                                                (heredoc-src (:source checkpoint) terminator)
+                                                "chmod a+x " tmpfile-name
+                                                "; " (invocation-string
+                                                       (:invocation checkpoint)
+                                                       tmpfile-name)
+                                                "; rc=$?"
+                                                "; rm " tmpfile-name
+                                                "; exit $rc")
+                                     ;;_ (do (println "CHESTER: " instr)) ;; (System/exit 0))
+                                     result (ssh/ssh session {:cmd
+                                                              (str "sudo su "
+                                                                   (or (:user checkpoint)
+                                                                       "root")
+                                                                   " - ")
+                                                              :in instr})]
+                                 (when *log*
+                                   (log-result (:out result)
+                                               (:err result)
+                                               (:exit result)
+                                               (:short-name @node)
+                                               (:public_ip @node)
+                                               (:runid checkpoint)))
 
-                             (when-not (ssh/connected? session)
-                               (ssh/connect session
-                                            (or (-> @node :options :timeout)
-                                                (* 60 1000))))
+                                 (assoc checkpoint :stdout {:keys (:stdout checkpoint)
+                                                            :value (:out result)}
+                                                   :stderr {:keys (:stderr checkpoint)
+                                                            :value (:err result)}
+                                                   :exit {:keys (:exit checkpoint)
+                                                          :value (:exit result)}
+                                                   :success {:keys (:success checkpoint)
+                                                             :value nil}))
 
-                             (when *log*
-                               (log :debug (node-log-str (:short-name @node)
-                                                         (:public_ip @node)
-                                                         (:runid checkpoint)
-                                                         (clojure.string/trim
-                                                           (:source checkpoint)))))
-
-;;                             (let [result (ssh/ssh session {:cmd
-;;                                                            (str "sudo su "
-;;                                                                 (or (:user checkpoint)
-;;                                                                     "root")
-;;                                                                 " - ")
-;;                                                            :in (:source checkpoint)})]
-                             (let [tmpfile-name (str "./" (tempfile-name false))
-                                   terminator (:runid checkpoint)
-                                   instr (str "cat <<-" terminator " > " tmpfile-name
-                                              (heredoc-src (:source checkpoint) terminator)
-                                              "chmod a+x " tmpfile-name
-                                              "; " (invocation-string
-                                                     (:invocation checkpoint)
-                                                     tmpfile-name)
-                                              "; rc=$?"
-                                              "; rm " tmpfile-name
-                                              "; exit $rc")
-                                   ;;_ (do (println "CHESTER: " instr)) ;; (System/exit 0))
-                                   result (ssh/ssh session {:cmd
-                                                            (str "sudo su "
-                                                                 (or (:user checkpoint)
-                                                                     "root")
-                                                                 " - ")
-                                                            :in instr})]
-                               (when *log*
-                                 (log-result (:out result)
-                                             (:err result)
-                                             (:exit result)
-                                             (:short-name @node)
-                                             (:public_ip @node)
-                                             (:runid checkpoint)))
-
-                               (assoc checkpoint :stdout {:keys (:stdout checkpoint)
-                                                          :value (:out result)}
-                                                 :stderr {:keys (:stderr checkpoint)
-                                                          :value (:err result)}
-                                                 :exit {:keys (:exit checkpoint)
-                                                        :value (:exit result)}
-                                                 :success {:keys (:success checkpoint)
-                                                           :value nil}))
-
-                             (finally (ssh/disconnect session))))
-                         (catch Exception se
-                           (log :error
-                             (node-log-str (:short-name @node)
-                                           (:public_ip @node)
-                                           (:runid checkpoint)
-                                           (apply str
-                                             (flatten [(.getMessage se)
-                                                       (map #(str "\n\t" %) (.getStackTrace se))]))
-                                           ". "
-                                           remaining-attempts
-                                           " attempts remaining."))
-                           nil))]
-                (assoc resolved-checkpoint :public_ip (:public_ip @node))
-                (recur (dec remaining-attempts))))))
-                ))))
+                               (finally (ssh/disconnect session))))
+                           (catch Exception se
+                             (log :error (:short-name @node) (:public_ip @node) (:runid checkpoint)
+                                  (apply str
+                                    (flatten [(.getMessage se)
+                                              (map #(str "\n\t" %) (.getStackTrace se))]))
+                                  ". "
+                                  remaining-attempts
+                                  " attempts remaining.")
+                             nil))]
+                  (assoc resolved-checkpoint :public_ip (:public_ip @node))
+                  (recur (dec remaining-attempts))))))
+                  )))))
 
 (defn short-name
   [node]
@@ -319,7 +328,7 @@
 
 (defrecord NodeManager [nodes effective version context]
   PNodeManager
-  (get-node [self node]
+  (get-node [self node runid]
     (cond
 
       ;; If you're only passing a string, the only outcome can be
@@ -346,7 +355,7 @@
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)
                 ;;_ (println ctor context node)
-                n (-> (ctor context) (create node (full-node-name self node)))
+                n (-> (ctor context) (create node (full-node-name self node) runid))
                 agent (ssh/ssh-agent {})]
             (ssh/add-identity agent {:name (:name @(:data @n))
                                      :private-key (-> @(:data @n) :private-key)})
@@ -364,7 +373,8 @@
                 (let [ts (java.util.Date.)]
                   (assoc (if (= "local" (full-node-name self node))
                            (invoke-local checkpoint)
-                           (let [node (get-node self node)]
+                           (let [node (get-node self node (:runid checkpoint))]
+                             ;; TODO: log checkpoint started here, instead
                              (if (nil? (:data node))
                                (invoke-local checkpoint)
                                (invoke-remote checkpoint node))))
@@ -394,7 +404,8 @@
 
 
 (defn node-manager
-  [effective & [version]]
+  [effective callbacks & [version]]
+  (alter-var-root #'log (fn [_] (partial log* callbacks)))
   (NodeManager. (atom {"local" (LocalNode.)})
                 effective
                 (or version 0)
