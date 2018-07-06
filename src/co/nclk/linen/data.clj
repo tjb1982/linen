@@ -14,7 +14,7 @@
             (clojure.string/replace
               s #"~" (str (System/getProperty "user.home")))
             s)]
-    (-> s slurp yaml/parse-string)))
+    (-> s slurp yaml/parse-all)))
 
 
 (defrecord FileDataConnector []
