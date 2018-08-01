@@ -18,5 +18,6 @@
                                 (pjstadig.humane-test-output/activate!)
                                 (require '[co.nclk.linen.core :as linen] '[co.nclk.linen.core-test :refer :all])]
                    :resource-paths ["test/resources", "/home/tjb1982/nclk/them/datastax/yar/q/qapi/resources/linen"]}}
+  :java-source-paths ["src/java"]
   :aot :all
   :main co.nclk.linen.core)

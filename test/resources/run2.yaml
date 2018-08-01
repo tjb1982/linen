@@ -22,38 +22,44 @@ config:
       inputs:
         inmsg: ~@outmsg
 expected:
-- name: test1
+  header:
+    name: test1
   env: {}
-- parent:
-    module:
-    - name:
-      provides:
-      - MSG
-      env: {MSG: hello}
-    - checkpoint:
-      - &result
-        source: echo hello
-        stdout: {keys: [null, MSG], value: "hello"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local, stdout: MSG}
-        user:
-        proxy:
-      env: {MSG: "hello"}
-    outputs: {outmsg: ~@MSG}
-  child:
-    module:
-    - name:
-      requires: [inmsg]
-      env: {inmsg: "hello"}
-    - checkpoint:
-      - <<: *result
-        node: {name: local}
-        stdout: {keys: [null, null], value: "hello"}
-      env: {}
-    inputs:
-      inmsg: ~@outmsg
+  body:
+  - parent:
+      module:
+        header:
+          name:
+          provides:
+          - MSG
+        env: {outmsg: hello}
+        body:
+        - checkpoint:
+          - &result
+            source: echo hello
+            stdout: {keys: [null, MSG], value: "hello"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local, stdout: MSG}
+            user:
+            proxy:
+          env: {MSG: "hello"}
+      outputs: {outmsg: ~@MSG}
+    child:
+      module:
+        header:
+          name:
+          requires: [inmsg]
+        env: {}
+        body:
+        - checkpoint:
+          - <<: *result
+            node: {name: local}
+            stdout: {keys: [null, null], value: "hello"}
+          env: {}
+      inputs:
+        inmsg: ~@outmsg
 
 ---
 
@@ -83,48 +89,54 @@ config:
       inputs:
         inmsg: ~@outmsg
 expected:
-- name: test1
+  header:
+    name: test1
   env: {}
-- parent:
-    module:
-    - name:
-      provides:
-      - MSG
-      env: {MSG: hello}
-    - checkpoint:
-      - &result
-        source: echo hello
-        stdout: {keys: [null, MSG], value: "hello"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local, stdout: MSG}
-        user:
-        proxy:
-      env: {MSG: "hello"}
-    - checkpoint:
-      - source: echo not used
-        stdout: {keys: [null, null], value: "not used"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local}
-        user:
-        proxy:
-      env: {}
-    outputs: {outmsg: ~@MSG}
-  child:
-    module:
-    - name:
-      requires: [inmsg]
-      env: {inmsg: "hello"}
-    - checkpoint:
-      - <<: *result
-        node: {name: local}
-        stdout: {keys: [null, null], value: "hello"}
-      env: {}
-    inputs:
-      inmsg: ~@outmsg
+  body:
+  - parent:
+      module:
+        header:
+          name:
+          provides:
+          - MSG
+        env: {outmsg: hello}
+        body:
+        - checkpoint:
+          - &result
+            source: echo hello
+            stdout: {keys: [null, MSG], value: "hello"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local, stdout: MSG}
+            user:
+            proxy:
+          env: {MSG: "hello"}
+        - checkpoint:
+          - source: echo not used
+            stdout: {keys: [null, null], value: "not used"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local}
+            user:
+            proxy:
+          env: {}
+      outputs: {outmsg: ~@MSG}
+    child:
+      module:
+        header:
+          name:
+          requires: [inmsg]
+        env: {}
+        body:
+        - checkpoint:
+          - <<: *result
+            node: {name: local}
+            stdout: {keys: [null, null], value: "hello"}
+          env: {}
+      inputs:
+        inmsg: ~@outmsg
 
 ---
 
@@ -154,48 +166,54 @@ config:
       inputs:
         inmsg: ~@outmsg
 expected:
-- name: test1
+  header:
+    name: test1
   env: {}
-- parent:
-    module:
-    - name:
-      provides:
-        MSG: ~@MSG
-      env: {MSG: hello}
-    - checkpoint:
-      - source: echo not used
-        stdout: {keys: [null, null], value: "not used"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local}
-        user:
-        proxy:
-      env: {}
-    - checkpoint:
-      - &result
-        source: echo hello
-        stdout: {keys: [null, MSG], value: "hello"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local, stdout: MSG}
-        user:
-        proxy:
-      env: {MSG: "hello"}
-    outputs: {outmsg: ~@MSG}
-  child:
-    module:
-    - name:
-      requires: [inmsg]
-      env: {inmsg: "hello"}
-    - checkpoint:
-      - <<: *result
-        node: {name: local}
-        stdout: {keys: [null, null], value: "hello"}
-      env: {}
-    inputs:
-      inmsg: ~@outmsg
+  body:
+  - parent:
+      module:
+        header:
+          name:
+          provides:
+            MSG: ~@MSG
+        env: {outmsg: hello}
+        body:
+        - checkpoint:
+          - source: echo not used
+            stdout: {keys: [null, null], value: "not used"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local}
+            user:
+            proxy:
+          env: {}
+        - checkpoint:
+          - &result
+            source: echo hello
+            stdout: {keys: [null, MSG], value: "hello"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local, stdout: MSG}
+            user:
+            proxy:
+          env: {MSG: "hello"}
+      outputs: {outmsg: ~@MSG}
+    child:
+      module:
+        header:
+          name:
+          requires: [inmsg]
+        env: {}
+        body:
+        - checkpoint:
+          - <<: *result
+            node: {name: local}
+            stdout: {keys: [null, null], value: "hello"}
+          env: {}
+      inputs:
+        inmsg: ~@outmsg
 
 ---
 
@@ -226,49 +244,55 @@ config:
       inputs:
         inmsg: ~@outmsg
 expected:
-- name: test1
+  header:
+    name: test1
   env: {}
-- parent:
-    module:
-    - name:
-      provides:
-        key: MSG
-        value: ~@MSG
-      env: {MSG: hello}
-    - checkpoint:
-      - &result
-        source: echo hello
-        stdout: {keys: [null, MSG], value: "hello"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local, stdout: MSG}
-        user:
-        proxy:
-      env: {MSG: "hello"}
-    - checkpoint:
-      - source: echo not used
-        stdout: {keys: [null, null], value: "not used"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local}
-        user:
-        proxy:
-      env: {}
-    outputs: {outmsg: ~@MSG}
-  child:
-    module:
-    - name:
-      requires: [inmsg]
-      env: {inmsg: "hello"}
-    - checkpoint:
-      - <<: *result
-        node: {name: local}
-        stdout: {keys: [null, null], value: "hello"}
-      env: {}
-    inputs:
-      inmsg: ~@outmsg
+  body:
+  - parent:
+      module:
+        header:
+          name:
+          provides:
+            key: MSG
+            value: ~@MSG
+        env: {outmsg: hello}
+        body:
+        - checkpoint:
+          - &result
+            source: echo hello
+            stdout: {keys: [null, MSG], value: "hello"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local, stdout: MSG}
+            user:
+            proxy:
+          env: {MSG: "hello"}
+        - checkpoint:
+          - source: echo not used
+            stdout: {keys: [null, null], value: "not used"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local}
+            user:
+            proxy:
+          env: {}
+      outputs: {outmsg: ~@MSG}
+    child:
+      module:
+        header:
+          name:
+          requires: [inmsg]
+        env: {}
+        body:
+        - checkpoint:
+          - <<: *result
+            node: {name: local}
+            stdout: {keys: [null, null], value: "hello"}
+          env: {}
+      inputs:
+        inmsg: ~@outmsg
 
 ---
 
@@ -302,49 +326,55 @@ config:
       inputs:
         inmsg: ~@outmsg
 expected:
-- name: test1
+  header:
+    name: test1
   env: {}
-- parent:
-    module:
-    - name:
-      provides:
-        MSG_OBJ:
-          ~(or:
-          - ~@MSG_OBJ
-          - greeting: ~@MSG
-      env: {MSG_OBJ: {greeting: hello}}
-    - checkpoint:
-      - source: echo not used
-        stdout: {keys: [null, null], value: "not used"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local}
-        user:
-        proxy:
-      env: {}
-    - checkpoint:
-      - &result
-        source: echo hello
-        stdout: {keys: [null, MSG], value: "hello"}
-        stderr: {keys: [null, null], value: ""}
-        exit: {keys: [null, null], value: 0}
-        success: {keys: [null, null], value: true}
-        node: {name: local, stdout: MSG}
-        user:
-        proxy:
-      env: {MSG: "hello"}
-    outputs: {outmsg: ~@MSG_OBJ.greeting}
-  child:
-    module:
-    - name:
-      requires: [inmsg]
-      env: {inmsg: "hello"}
-    - checkpoint:
-      - <<: *result
-        node: {name: local}
-        stdout: {keys: [null, null], value: "hello"}
-      env: {}
-    inputs:
-      inmsg: ~@outmsg
+  body:
+  - parent:
+      module:
+        header:
+          name:
+          provides:
+            MSG_OBJ:
+              ~(or:
+              - ~@MSG_OBJ
+              - greeting: ~@MSG
+        env: {outmsg: hello}
+        body:
+        - checkpoint:
+          - source: echo not used
+            stdout: {keys: [null, null], value: "not used"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local}
+            user:
+            proxy:
+          env: {}
+        - checkpoint:
+          - &result
+            source: echo hello
+            stdout: {keys: [null, MSG], value: "hello"}
+            stderr: {keys: [null, null], value: ""}
+            exit: {keys: [null, null], value: 0}
+            success: {keys: [null, null], value: true}
+            node: {name: local, stdout: MSG}
+            user:
+            proxy:
+          env: {MSG: "hello"}
+      outputs: {outmsg: ~@MSG_OBJ.greeting}
+    child:
+      module:
+        header:
+          name:
+          requires: [inmsg]
+        env: {}
+        body:
+        - checkpoint:
+          - <<: *result
+            node: {name: local}
+            stdout: {keys: [null, null], value: "hello"}
+          env: {}
+      inputs:
+        inmsg: ~@outmsg
 

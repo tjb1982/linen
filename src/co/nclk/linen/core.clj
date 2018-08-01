@@ -383,18 +383,12 @@
 
 
 (defn clean-up
-  [node-manager & [failed]]
+  [node-manager & [failed?]]
   (doall
     (pmap
       (fn [[k n]]
         (when (:data n)
-          (let [options (-> @(:data n) :options)]
-          ;; when destroy-on-exit is true, destroy, unless persist-on-failure
-          ;; is true and the test failed.
-          (when (and (-> options :destroy-on-exit true?)
-                     (not (and failed
-                               (-> options :persist-on-failure true?))))
-            (destroy n)))))
+          (destroy n failed?)))
       @(-> node-manager :nodes))))
 
 

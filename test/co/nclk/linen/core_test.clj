@@ -21,7 +21,7 @@
 (def seed 8031)
 (def base-config
   {:effective seed
-   :node-manager (node-manager seed)
+   :node-manager (node-manager seed {})
    :data-connector res-conn
    :failed? (atom false)})
 
@@ -199,7 +199,7 @@
     (let [module (-> "basic1.yaml" slurp-test)
           r (linen/run-module module (assoc base-config :env {:FOO {:name "bar"}}))]
       (-> r nil? not is)
-      (let [cp (-> r second :checkpoint)]
+      (let [cp (-> r :body first :checkpoint)]
         (-> cp nil? not is)
         (->> cp first keys (filter #{:runid :stdout :stderr :exit :success}) count (= 5) is)
         (->> cp first :exit :value (= 0) is)
