@@ -12,16 +12,14 @@
 (defprotocol PNode
   (proxy [self checkpoint])
   (create [self node full-name runid])
-  (destroy [self])
+  (destroy [self failed?])
   (clone [self]))
 
 
 (defprotocol PNodeManager
   (get-node [self node runid])
   (invoke [self node-label checkpoint])
-  (full-node-name [self node])
-  (remove-node [self node])
-  (isolate [self]))
+  (full-node-name [self node]))
 
 
 (def ^:dynamic *log* false)
@@ -66,7 +64,7 @@
 (defrecord LocalNode []
   PNode
   (create [self node full-name runid] self)
-  (destroy [self] nil)
+  (destroy [self failed?] nil)
   (clone [self] self))
 
 
@@ -132,8 +130,9 @@
       (when-not proxy?
         (spit tmpfile-name (:source checkpoint))
         (-> (java.io.File. tmpfile-name) (.setExecutable true))
-        ;; FIXME: can't we poll for something instead?
-        (Thread/sleep 500))
+        ;; XXX: Not sure why this was necessary before... seems to be working without it.
+        ;;(Thread/sleep 500))
+        )
 
       (loop []
         (let [result
@@ -229,20 +228,22 @@
                                            agent
                                            (:public_ip @node)
                                            {:strict-host-key-checking :no
-                                            :log-level :quiet
+                                            :log-level :verbose
                                             :user-known-hosts-file
                                             (or (-> @node
                                                     :options
                                                     :user-known-hosts-file)
                                                 "/dev/null")
-                                            :username (-> @node :options :user)})]
+                                            :username (:ssh-user @node)})]
 
                              (when (and *log*
                                         (not (clojure.string/blank?
                                                (:display checkpoint))))
-                               (log :info (:short-name @node) (:public_ip @node) (:runid checkpoint)
-                                    (clojure.string/trim
-                                      (:display checkpoint))))
+                               (log :info (:short-name @node)
+                                          (:public_ip @node)
+                                          (:runid checkpoint)
+                                          (clojure.string/trim
+                                            (:display checkpoint))))
 
                              (try
 
@@ -310,7 +311,10 @@
                                   " attempts remaining.")
                              nil))]
                   (assoc resolved-checkpoint :public_ip (:public_ip @node))
-                  (recur (dec remaining-attempts))))))
+                  (let [remaining-attempts (dec remaining-attempts)
+                        sleep-time (if (zero? remaining-attempts) 0 2000)]
+                    (Thread/sleep sleep-time)
+                    (recur remaining-attempts))))))
                   )))))
 
 (defn short-name
@@ -343,14 +347,6 @@
           ;; already existed, so we throw an exception because they thought wrong.
           (and (nil? (-> node :connector))
                (throw (RuntimeException. (str "Unknown node: " (full-node-name self node)))))
-          ;; XXX this really isn't a good idea. Running stuff locally that's
-          ;; intended to be run somewhere else might be destructive.
-          ;;(and (nil? (-> node :connector))
-          ;;     (do
-          ;;       (log :warn
-          ;;         (format "linen: connector not found for node: %s. Using \"local\" instead."
-          ;;                 (:name node)))
-          ;;       (-> @nodes (get "local"))))
 
           ;; Else, create the node and add it to the list of managed nodes.
           (let [ctor (-> node :connector resolve-connector)
@@ -359,6 +355,7 @@
                 agent (ssh/ssh-agent {})]
             (ssh/add-identity agent {:name (:name @(:data @n))
                                      :private-key (-> @(:data @n) :private-key)})
+
             (swap! (:data @n) #(assoc % :ssh-agent agent
                                         :short-name (short-name node)))
             ;; The `node` returned from the constructor is a promise.
@@ -369,7 +366,7 @@
                                    @n))
             @n))))
   (invoke [self checkpoint node]
-    (let [fun (fn []
+    (let [res (future
                 (let [ts (java.util.Date.)]
                   (assoc (if (= "local" (full-node-name self node))
                            (invoke-local checkpoint)
@@ -380,16 +377,13 @@
                                (invoke-remote checkpoint node))))
                          :started (.getTime ts)
                          :finished (.getTime (java.util.Date.)))))
-          checkpoint (if (:abandon checkpoint)
-                       (do (future (fun)) nil)
-                       (fun))]
+          checkpoint (when-not (:abandon checkpoint) @res)]
       (if (and checkpoint
                (false? (:log checkpoint)))
         ;; disable these keys for checkpoint recording, too, if :log is false
         (dissoc checkpoint :source :stdout :stderr)
         checkpoint)
     ))
-  (remove-node [self node] nodes)
   (full-node-name [self node]
     (cond
       (string? node)
@@ -400,7 +394,7 @@
       "local"
 
       :else (str (name (:name node)) "-" (.getTime (:effective self)) "-" (:version self))))
-  (isolate [self] self))
+  )
 
 
 (defn node-manager

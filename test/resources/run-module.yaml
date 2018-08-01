@@ -8,20 +8,22 @@ module:
     display: Echoing hello
     source: echo hello
 expected:
-- name: test1
-  requires:
-  provides:
+  header:
+    name: test1
+    requires:
+    provides:
   env: {}
-- checkpoint:
-  - <<: *cp
-    stdout: {keys: [null, null], value: "hello"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {name: local}
-    user:
-    proxy:
-  env: {}
+  body:
+  - checkpoint:
+    - <<: *cp
+      stdout: {keys: [null, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
 
 ---
 
@@ -38,22 +40,24 @@ module:
     nodes:
     - stdout: FOO
 expected:
-- name: test1
-  requires:
-  provides:
-  - FOO
+  header:
+    name: test1
+    requires:
+    provides:
+    - FOO
   env: {FOO: hello}
-- checkpoint:
-  - display: Echoing hello
-    source: echo hello
-    stdout: {keys: [null, FOO], value: "hello"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {stdout: "FOO", name: local}
-    user:
-    proxy:
-  env: {FOO: "hello"}
+  body:
+  - checkpoint:
+    - display: Echoing hello
+      source: echo hello
+      stdout: {keys: [null, FOO], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {stdout: "FOO", name: local}
+      user:
+      proxy:
+    env: {FOO: "hello"}
 
 ---
 
@@ -72,24 +76,26 @@ module:
     - {}
     - 
 expected:
-- name: test1
-  requires:
-  provides:
-  - FOO
+  header:
+    name: test1
+    requires:
+    provides:
+    - FOO
   env: {FOO: [hello, hello]}
-- checkpoint:
-  - &cp
-    display: Echoing hello
-    source: echo hello
-    stdout: {keys: [FOO, null], value: "hello"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {name: local}
-    user:
-    proxy:
-  - *cp
-  env: {FOO: [hello, hello]}
+  body:
+  - checkpoint:
+    - &cp
+      display: Echoing hello
+      source: echo hello
+      stdout: {keys: [FOO, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    - *cp
+    env: {FOO: [hello, hello]}
 
 ---
 
@@ -104,22 +110,24 @@ module:
     display: Echoing hello ~{FOO}
     source: echo hello ~{FOO}
 expected:
-- name: test1
-  requires:
-  - FOO
-  provides:
+  header:
+    name: test1
+    requires:
+    - FOO
+    provides:
   env: {FOO: bar}
-- checkpoint:
-  - display: Echoing hello bar
-    source: echo hello bar
-    stdout: {keys: [null, null], value: "hello bar"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {name: local}
-    user:
-    proxy:
-  env: {}
+  body:
+  - checkpoint:
+    - display: Echoing hello bar
+      source: echo hello bar
+      stdout: {keys: [null, null], value: "hello bar"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
 
 ---
 
@@ -138,24 +146,26 @@ module:
     nodes:
     - stdout: FOO
 expected:
-- name: test1
-  requires:
-  - FOO
-  provides:
-  - key: FOO
-    value: ~@FOO
+  header:
+    name: test1
+    requires:
+    - FOO
+    provides:
+    - key: FOO
+      value: ~@FOO
   env: {FOO: hello bar}
-- checkpoint:
-  - display: Echoing hello bar
-    source: echo hello bar
-    stdout: {keys: [null, FOO], value: "hello bar"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {name: local, stdout: FOO}
-    user:
-    proxy:
-  env: {FOO: hello bar}
+  body:
+  - checkpoint:
+    - display: Echoing hello bar
+      source: echo hello bar
+      stdout: {keys: [null, FOO], value: "hello bar"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local, stdout: FOO}
+      user:
+      proxy:
+    env: {FOO: hello bar}
 
 ---
 
@@ -170,22 +180,24 @@ module:
     display: Echoing hello ~{FOO}
     source: echo hello ~{FOO}
 expected:
-- name: test1
-  requires:
-  - key: FOO
-    default: bar
+  header:
+    name: test1
+    requires:
+    - key: FOO
+      default: bar
   env: {FOO: bar}
-- checkpoint:
-  - display: Echoing hello bar
-    source: echo hello bar
-    stdout: {keys: [null, null], value: "hello bar"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {name: local}
-    user:
-    proxy:
-  env: {}
+  body:
+  - checkpoint:
+    - display: Echoing hello bar
+      source: echo hello bar
+      stdout: {keys: [null, null], value: "hello bar"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
 
 ---
 
@@ -204,22 +216,24 @@ module:
     nodes:
     - stdout: FOO
 expected:
-- name: test1
-  provides:
-    obj:
-      foo: ~@FOO
+  header:
+    name: test1
+    provides:
+      obj:
+        foo: ~@FOO
   env: {obj: {foo: "hello"}}
-- checkpoint:
-  - display: Echoing hello
-    source: echo hello
-    stdout: {keys: [null, FOO], value: "hello"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {name: local, stdout: FOO}
-    user:
-    proxy:
-  env: {FOO: "hello"}
+  body:
+  - checkpoint:
+    - display: Echoing hello
+      source: echo hello
+      stdout: {keys: [null, FOO], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local, stdout: FOO}
+      user:
+      proxy:
+    env: {FOO: "hello"}
 
 ---
 
@@ -235,18 +249,20 @@ module:
       - [out, err, exit]
       - ~(=: [~@out, "hello"]
 expected:
-- name: test1
+  header:
+    name: test1
   env: {}
-- checkpoint:
-  - <<: *cp
-    stdout: {keys: [null, null], value: "hello"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: true}
-    node: {name: local}
-    user:
-    proxy:
-  env: {}
+  body:
+  - checkpoint:
+    - <<: *cp
+      stdout: {keys: [null, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
 
 ---
 
@@ -262,16 +278,18 @@ module:
       - [out, err, exit]
       - ~(clojure.string/blank?: [~@out]
 expected:
-- name: test1
+  header:
+    name: test1
   env: {}
-- checkpoint:
-  - <<: *cp
-    stdout: {keys: [null, null], value: "hello"}
-    stderr: {keys: [null, null], value: ""}
-    exit: {keys: [null, null], value: 0}
-    success: {keys: [null, null], value: false}
-    node: {name: local}
-    user:
-    proxy:
-  env: {}
+  body:
+  - checkpoint:
+    - <<: *cp
+      stdout: {keys: [null, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: false}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
 
