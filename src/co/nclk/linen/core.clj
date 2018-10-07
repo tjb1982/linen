@@ -166,8 +166,7 @@
         resolved (assoc-in resolved [:success :value] success)]
 
     (when (not (true? success))
-      (swap! (:failed? config)
-             (fn [_] true))
+      (swap! (:failed? config) (fn [_] true))
       (log :debug (with-out-str (clojure.pprint/pprint resolved)))
       (log :error (str "[" (:runid resolved) "] Failed.")))
 

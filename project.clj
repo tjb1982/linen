@@ -11,12 +11,14 @@
                  [cheshire "5.6.3"]
                  [clj-ssh "0.5.14"]
                  [co.nclk/clj-yaml "1.0.0"]
-                 [co.nclk/flax "2.0.5"]
+                 ;[co.nclk/flax "2.0.5"]
+                 [co.nclk/flax "4.0.0-SNAPSHOT"]
                  ]
   :profiles {:dev {:dependencies [[pjstadig/humane-test-output "0.8.3"]]
                    :injections [(require 'pjstadig.humane-test-output)
                                 (pjstadig.humane-test-output/activate!)
-                                (require '[co.nclk.linen.core :as linen] '[co.nclk.linen.core-test :refer :all])]
+                                (require '[co.nclk.linen.core :as linen]
+                                         '[co.nclk.linen.core-test :refer :all])]
                    :resource-paths ["test/resources", "/home/tjb1982/nclk/them/datastax/yar/q/qapi/resources/linen"]}}
   :java-source-paths ["src/java"]
   :aot :all
