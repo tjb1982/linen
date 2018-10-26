@@ -1,10 +1,23 @@
 name: experiment
 
-requires: [OUTER]
+requires:
 
 ---
 
-checkpoint:
-  source: echo hello world «{OUTER}
-
+(pmap:
+- (fn:
+  - []
+  - checkpoint:
+      source: |
+        cat <<-EOF
+        hhello world hello world hello world hello world ello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello worldo 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world hello world 
+        EOF
+- (range: [0, 100]
 

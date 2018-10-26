@@ -133,6 +133,22 @@
     \newline))
 
 
+(defn exec-retry-text-file-busy
+  [argv]
+  (let [ret
+        (try
+          (-> (Runtime/getRuntime)
+            (.exec (into-array String argv)))
+          (catch java.io.IOException ioe
+            ;; XXX: https://bugs.openjdk.java.net/browse/JDK-8068370
+            (if (-> ioe .getMessage (.endsWith "error=26, Text file busy"))
+              ;; "Text file busy"
+              nil
+              (throw ioe))))]
+    (if-not ret (recur argv) ret)))
+
+
+
 (defn- invoke-local
   [checkpoint & [argv]]
   (binding [*log* (not (false? (:log checkpoint)))]
@@ -171,8 +187,7 @@
                ":\n"
                (:source checkpoint))))
 
-      (let [proc (-> (Runtime/getRuntime)
-                   (.exec (into-array String argv)))
+      (let [proc (exec-retry-text-file-busy argv)
             {:keys [stdout stderr exit]}
             (wait-with-log proc (:timeout checkpoint) (:runid checkpoint))
             result
@@ -410,7 +425,6 @@
                   (assoc (if (= "local" (full-node-name self node))
                            (invoke-local checkpoint)
                            (let [node (get-node self node (:runid checkpoint))]
-                             ;; TODO: log checkpoint started here, instead
                              (if (nil? (:data node))
                                (invoke-local checkpoint)
                                (invoke-remote checkpoint node))))

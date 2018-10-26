@@ -284,3 +284,7 @@
           (-> r first :child :child k nil? is))))
     ))
 
+(deftest experiment
+  (let [module (-> "run3.yaml" slurp-test)
+        _ (println module)
+        r (linen/evaluate module base-config)]))
