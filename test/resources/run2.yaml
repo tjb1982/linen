@@ -13,14 +13,14 @@ config:
           nodes:
           - stdout: MSG
       outputs:
-        outmsg: ~@MSG
+        outmsg: «MSG
     child:
       module:
       - requires: [inmsg]
       - checkpoint:
-          source: echo ~{inmsg}
+          source: echo «{inmsg}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 expected:
   header:
     name: test1
@@ -45,7 +45,7 @@ expected:
             user:
             proxy:
           env: {MSG: "hello"}
-      outputs: {outmsg: ~@MSG}
+      outputs: {outmsg: «MSG}
     child:
       module:
         header:
@@ -59,7 +59,7 @@ expected:
             stdout: {keys: [null, null], value: "hello"}
           env: {}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 
 ---
 
@@ -80,14 +80,14 @@ config:
       - checkpoint:
           source: echo not used
       outputs:
-        outmsg: ~@MSG
+        outmsg: «MSG
     child:
       module:
       - requires: [inmsg]
       - checkpoint:
-          source: echo ~{inmsg}
+          source: echo «{inmsg}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 expected:
   header:
     name: test1
@@ -122,7 +122,7 @@ expected:
             user:
             proxy:
           env: {}
-      outputs: {outmsg: ~@MSG}
+      outputs: {outmsg: «MSG}
     child:
       module:
         header:
@@ -136,7 +136,7 @@ expected:
             stdout: {keys: [null, null], value: "hello"}
           env: {}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 
 ---
 
@@ -149,7 +149,7 @@ config:
   - parent:
       module:
       - provides:
-          MSG: ~@MSG
+          MSG: «MSG
       - checkpoint:
           source: echo not used
       - checkpoint:
@@ -157,14 +157,14 @@ config:
           nodes:
           - stdout: MSG
       outputs:
-        outmsg: ~@MSG
+        outmsg: «MSG
     child:
       module:
       - requires: [inmsg]
       - checkpoint:
-          source: echo ~{inmsg}
+          source: echo «{inmsg}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 expected:
   header:
     name: test1
@@ -175,7 +175,7 @@ expected:
         header:
           name:
           provides:
-            MSG: ~@MSG
+            MSG: «MSG
         env: {outmsg: hello}
         body:
         - checkpoint:
@@ -199,7 +199,7 @@ expected:
             user:
             proxy:
           env: {MSG: "hello"}
-      outputs: {outmsg: ~@MSG}
+      outputs: {outmsg: «MSG}
     child:
       module:
         header:
@@ -213,7 +213,7 @@ expected:
             stdout: {keys: [null, null], value: "hello"}
           env: {}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 
 ---
 
@@ -227,7 +227,7 @@ config:
       module:
       - provides:
           key: MSG
-          value: ~@MSG
+          value: «MSG
       - checkpoint:
           source: echo hello
           nodes:
@@ -235,14 +235,14 @@ config:
       - checkpoint:
           source: echo not used
       outputs:
-        outmsg: ~@MSG
+        outmsg: «MSG
     child:
       module:
       - requires: [inmsg]
       - checkpoint:
-          source: echo ~{inmsg}
+          source: echo «{inmsg}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 expected:
   header:
     name: test1
@@ -254,7 +254,7 @@ expected:
           name:
           provides:
             key: MSG
-            value: ~@MSG
+            value: «MSG
         env: {outmsg: hello}
         body:
         - checkpoint:
@@ -278,7 +278,7 @@ expected:
             user:
             proxy:
           env: {}
-      outputs: {outmsg: ~@MSG}
+      outputs: {outmsg: «MSG}
     child:
       module:
         header:
@@ -292,7 +292,7 @@ expected:
             stdout: {keys: [null, null], value: "hello"}
           env: {}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 
 ---
 
@@ -307,9 +307,9 @@ config:
       module:
       - provides:
           MSG_OBJ:
-            ~(or:
-            - ~@MSG_OBJ
-            - greeting: ~@MSG
+            (or:
+            - «MSG_OBJ
+            - greeting: «MSG
       - checkpoint:
           source: echo not used
       - checkpoint:
@@ -317,14 +317,14 @@ config:
           nodes:
           - stdout: MSG
       outputs:
-        outmsg: ~@MSG_OBJ.greeting
+        outmsg: «MSG_OBJ.greeting
     child:
       module:
       - requires: [inmsg]
       - checkpoint:
-          source: echo ~{inmsg}
+          source: echo «{inmsg}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 expected:
   header:
     name: test1
@@ -336,9 +336,9 @@ expected:
           name:
           provides:
             MSG_OBJ:
-              ~(or:
-              - ~@MSG_OBJ
-              - greeting: ~@MSG
+              (or:
+              - «MSG_OBJ
+              - greeting: «MSG
         env: {outmsg: hello}
         body:
         - checkpoint:
@@ -362,7 +362,7 @@ expected:
             user:
             proxy:
           env: {MSG: "hello"}
-      outputs: {outmsg: ~@MSG_OBJ.greeting}
+      outputs: {outmsg: «MSG_OBJ.greeting}
     child:
       module:
         header:
@@ -376,5 +376,5 @@ expected:
             stdout: {keys: [null, null], value: "hello"}
           env: {}
       inputs:
-        inmsg: ~@outmsg
+        inmsg: «outmsg
 

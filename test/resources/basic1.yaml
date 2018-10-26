@@ -3,12 +3,12 @@ requires:
 - key: FOO
 provides:
 - key: MESSAGE
-  value: ~@MESSAGE
+  value: «MESSAGE
 
 ---
 
 checkpoint:
-  source: echo hello ~{FOO.name}
+  source: echo hello «{FOO.name}
   assert: true
   nodes:
   - stdout: MESSAGE

@@ -9,22 +9,22 @@ config:
       - provides:
         - key: OBJ
           value:
-            foo: ~@FOO
+            foo: «FOO
       - checkpoint:
           display: Echoing hello
           source: echo hello
           nodes:
           - stdout: FOO
       outputs:
-        obj: ~@OBJ
+        obj: «OBJ
     child:
       module:
       - requires: [obj]
       - checkpoint:
-          display: Repeating ~{obj.foo}.
-          source: echo ~{obj.foo}~{OBJ.foo}
+          display: Repeating «{obj.foo}.
+          source: echo «{obj.foo}«{OBJ.foo}
       inputs:
-        obj: ~@obj
+        obj: «obj
 expected:
   header:
     name: test1
@@ -37,7 +37,7 @@ expected:
           provides:
           - key: OBJ
             value:
-              foo: ~@FOO
+              foo: «FOO
         env: {obj: {foo: hello}}
         body:
         - checkpoint:
@@ -52,7 +52,7 @@ expected:
             user:
             proxy:
           env: {FOO: "hello"}
-      outputs: {obj: ~@OBJ}
+      outputs: {obj: «OBJ}
     child:
       module:
         header:
@@ -67,7 +67,7 @@ expected:
             stdout: {keys: [null, null], value: "hello"}
           env: {}
       inputs:
-        obj: ~@obj
+        obj: «obj
 
 ---
 
@@ -83,25 +83,25 @@ config:
       - provides:
         - key: OBJ
           value:
-            foo: ~@FOO
+            foo: «FOO
       - checkpoint:
           display: Echoing hello
           source: echo hello
           nodes:
           - stdout: FOO
       outputs:
-        obj: ~@OBJ
+        obj: «OBJ
     child:
       inputs:
-        A: "This is the message: ~{obj.foo}"
-        obj: ~@obj
+        A: "This is the message: «{obj.foo}"
+        obj: «obj
       module:
       - requires:
         - A
         - obj
       - checkpoint:
-          display: Repeating ~{obj.foo} and ~{A}.
-          source: echo ~{obj.foo} ~{A}~{OBJ.foo}
+          display: Repeating «{obj.foo} and «{A}.
+          source: echo «{obj.foo} «{A}«{OBJ.foo}
 expected:
   header:
     name: test1
@@ -114,7 +114,7 @@ expected:
           provides:
           - key: OBJ
             value:
-              foo: ~@FOO
+              foo: «FOO
         env: {obj: {foo: hello}}
         body:
         - checkpoint:
@@ -129,7 +129,7 @@ expected:
             user:
             proxy:
           env: {FOO: "hello"}
-      outputs: {obj: ~@OBJ}
+      outputs: {obj: «OBJ}
     child:
       module:
         header:
@@ -145,8 +145,8 @@ expected:
             stdout: {keys: [null, null], value: "hello This is the message: hello"}
           env: {}
       inputs:
-        A: "This is the message: ~{obj.foo}"
-        obj: ~@obj
+        A: "This is the message: «{obj.foo}"
+        obj: «obj
 
 ---
 
@@ -167,18 +167,18 @@ config:
           nodes:
           - stdout: FOO
       outputs:
-        foo: ~@FOO
+        foo: «FOO
     child:
       inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
       module:
       - requires:
         - key: A
         - foo
       - checkpoint:
-          display: Repeating ~{foo} and ~{A}.
-          source: echo ~{foo} ~{A}~{FOO}
+          display: Repeating «{foo} and «{A}.
+          source: echo «{foo} «{A}«{FOO}
 expected:
   header:
     name: test1
@@ -204,7 +204,7 @@ expected:
             user:
             proxy:
           env: {FOO: "hello"}
-      outputs: {foo: ~@FOO}
+      outputs: {foo: «FOO}
     child:
       module:
         header:
@@ -222,8 +222,8 @@ expected:
             stdout: {keys: [null, null], value: "hello This is the message: hello"}
           env: {}
       inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
 
 ---
 
@@ -244,19 +244,19 @@ config:
           nodes:
           - stdout: FOO
       outputs:
-        foo: ~@FOO
+        foo: «FOO
     child:
       inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
       module:
       - requires:
         - key: A
           default: lalala
         - foo
       - checkpoint:
-          display: Repeating ~{foo} and ~{A}.
-          source: echo ~{foo} ~{A}~{FOO}
+          display: Repeating «{foo} and «{A}.
+          source: echo «{foo} «{A}«{FOO}
 expected:
   header:
     name: test1
@@ -282,7 +282,7 @@ expected:
             user:
             proxy:
           env: {FOO: "hello"}
-      outputs: {foo: ~@FOO}
+      outputs: {foo: «FOO}
     child:
       module:
         header:
@@ -301,8 +301,8 @@ expected:
             stdout: {keys: [null, null], value: "hello This is the message: hello"}
           env: {}
       inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
 
 ---
 
@@ -323,11 +323,11 @@ config:
           nodes:
           - stdout: FOO
       outputs:
-        foo: ~@FOO
+        foo: «FOO
     child:
       inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
       module:
       - requires:
         - A
@@ -335,8 +335,8 @@ config:
           default: lalala
         - foo
       - checkpoint:
-          display: Repeating ~{foo} and ~{A} ~{B}.
-          source: echo ~{foo} ~{A}~{FOO} ~{B}
+          display: Repeating «{foo} and «{A} «{B}.
+          source: echo «{foo} «{A}«{FOO} «{B}
 expected:
   header:
     name: test1
@@ -362,7 +362,7 @@ expected:
             user:
             proxy:
           env: {FOO: "hello"}
-      outputs: {foo: ~@FOO}
+      outputs: {foo: «FOO}
     child:
       module:
         header:
@@ -382,8 +382,8 @@ expected:
             stdout: {keys: [null, null], value: "hello This is the message: hello lalala"}
           env: {}
       inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
 
 ---
 
@@ -403,24 +403,24 @@ config:
           nodes:
           - stdout: FOO
       outputs:
-        foo: ~@FOO
+        foo: «FOO
     child:
     - inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
       module:
       - requires:
         - A
         - key: B
-          default: ~{A} lalala
+          default: «{A} lalala
         - foo
       - checkpoint:
-          display: Repeating ~{foo} and ~{A} ~{B}.
-          source: echo ~{foo} ~{A}~{FOO} ~{B}
+          display: Repeating «{foo} and «{A} «{B}.
+          source: echo «{foo} «{A}«{FOO} «{B}
     - this:
         is:
           a:
-            test: ~@foo
+            test: «foo
 expected:
   header:
     name: test1
@@ -446,7 +446,7 @@ expected:
             user:
             proxy:
           env: {FOO: "hello"}
-      outputs: {foo: ~@FOO}
+      outputs: {foo: «FOO}
     child:
     - module:
         header:
@@ -454,7 +454,7 @@ expected:
           requires:
           - A
           - key: B
-            default: ~{A} lalala
+            default: «{A} lalala
           - foo
         env: {}
         body:
@@ -467,8 +467,8 @@ expected:
                      value: "hello This is the message: hello This is the message: hello lalala"}
           env: {}
       inputs:
-        A: "This is the message: ~{foo}"
-        foo: ~@foo
+        A: "This is the message: «{foo}"
+        foo: «foo
     - this:
         is:
           a:
@@ -486,9 +486,9 @@ config:
       module:
       - provides:
           foos:
-            ~(conj: [~@foos, ~@FOO]
-      - ~(pmap:
-        - ~(fn:
+            (conj: [«foos, «FOO]
+      - (pmap:
+        - (fn:
           - [idx]
           - module:
             - requires:
@@ -496,23 +496,23 @@ config:
               provides:
               - FOO
             - checkpoint:
-                display: Echoing hello ~{idx}.
-                source: echo hello ~{idx}
+                display: Echoing hello «{idx}.
+                source: echo hello «{idx}
                 nodes:
                 - stdout: FOO
-            inputs: {idx: ~@idx}
+            inputs: {idx: «idx}
             outputs: [FOO]
-        - ~(range: [0,3]
+        - (range: [0,3]
       outputs: [foos]
     child:
       inputs:
-        A: "~{#foos}~{.} ~{/foos}"
+        A: "«{#foos}«{.} «{/foos}"
       module:
       - requires:
         - A
       - checkpoint:
-          display: Echoing ~{A}.
-          source: echo ~{A}
+          display: Echoing «{A}.
+          source: echo «{A}
 expected:
   header:
     name: test1
@@ -524,7 +524,7 @@ expected:
           name:
           provides:
             foos:
-              ~(conj: [~@foos, ~@FOO]
+              (conj: [«foos, «FOO]
         env:
           foos: ["hello 0", "hello 1", "hello 2"]
         body:
@@ -546,7 +546,7 @@ expected:
                   user:
                   proxy:
                 env: {FOO: hello 0}
-            inputs: {idx: ~@idx}
+            inputs: {idx: «idx}
             outputs: [FOO]
           - module:
               header:
@@ -566,7 +566,7 @@ expected:
                   user:
                   proxy:
                 env: {FOO: hello 1}
-            inputs: {idx: ~@idx}
+            inputs: {idx: «idx}
             outputs: [FOO]
           - module:
               header:
@@ -586,12 +586,12 @@ expected:
                   user:
                   proxy:
                 env: {FOO: hello 2}
-            inputs: {idx: ~@idx}
+            inputs: {idx: «idx}
             outputs: [FOO]
       outputs: [foos]
     child:
       inputs:
-        A: "~{#foos}~{.} ~{/foos}"
+        A: "«{#foos}«{.} «{/foos}"
       module:
         header:
           name:

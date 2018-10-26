@@ -107,8 +107,8 @@ module:
   - FOO
   provides:
 - checkpoint:
-    display: Echoing hello ~{FOO}
-    source: echo hello ~{FOO}
+    display: Echoing hello «{FOO}
+    source: echo hello «{FOO}
 expected:
   header:
     name: test1
@@ -139,10 +139,10 @@ module:
   - FOO
   provides:
   - key: FOO
-    value: ~@FOO
+    value: «FOO
 - checkpoint:
-    display: Echoing hello ~{FOO}
-    source: echo hello ~{FOO}
+    display: Echoing hello «{FOO}
+    source: echo hello «{FOO}
     nodes:
     - stdout: FOO
 expected:
@@ -152,7 +152,7 @@ expected:
     - FOO
     provides:
     - key: FOO
-      value: ~@FOO
+      value: «FOO
   env: {FOO: hello bar}
   body:
   - checkpoint:
@@ -177,8 +177,8 @@ module:
   - key: FOO
     default: bar
 - checkpoint:
-    display: Echoing hello ~{FOO}
-    source: echo hello ~{FOO}
+    display: Echoing hello «{FOO}
+    source: echo hello «{FOO}
 expected:
   header:
     name: test1
@@ -209,7 +209,7 @@ module:
 - name: test1
   provides:
     obj:
-      foo: ~@FOO
+      foo: «FOO
 - checkpoint:
     display: Echoing hello
     source: echo hello
@@ -220,7 +220,7 @@ expected:
     name: test1
     provides:
       obj:
-        foo: ~@FOO
+        foo: «FOO
   env: {obj: {foo: "hello"}}
   body:
   - checkpoint:
@@ -245,9 +245,9 @@ module:
     display: Echoing hello
     source: echo hello
     assert:
-      ~(fn:
+      (fn:
       - [out, err, exit]
-      - ~(=: [~@out, "hello"]
+      - (=: [«out, "hello"]
 expected:
   header:
     name: test1
@@ -274,9 +274,9 @@ module:
     display: Echoing hello
     source: echo hello
     assert:
-      ~(fn:
+      (fn:
       - [out, err, exit]
-      - ~(clojure.string/blank?: [~@out]
+      - (clojure.string/blank?: [«out]
 expected:
   header:
     name: test1

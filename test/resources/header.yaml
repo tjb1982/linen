@@ -5,4 +5,4 @@ parent:
       FOO: bar
   outputs: FOO
 child:
-- ~@FOO
+- «FOO

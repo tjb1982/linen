@@ -5,6 +5,6 @@ requires: [OUTER]
 ---
 
 checkpoint:
-  source: echo hello world ~{OUTER}
+  source: echo hello world «{OUTER}
 
 
