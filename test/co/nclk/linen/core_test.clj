@@ -152,22 +152,22 @@
           :argv [["a"] {:env {:a "b"}}]
           :expected {:a "b"}}
          {:label (str "When `provides` contains a map containing a key that matches any entry "
-                      "in the body env, and a value that `~@` references an entry in the body "
-                      "env, it should return the `~@`-value of the entry of the body env into the "
+                      "in the body env, and a value that `«` references an entry in the body "
+                      "env, it should return the `«`-value of the entry of the body env into the "
                       "key represented in the `provides` entry.")
-          :argv [{:a "~@b"} {:env {:b "c"}}]
+          :argv [{:a "«b"} {:env {:b "c"}}]
           :expected {:a "c"}}
          {:label (str "When the `provides` arg is a sequencial collection, each of its items "
                       "is `(reduce merge)`-ed.")
-          :argv [[{:a "b"} {:b "~@a"} {:c "~@b"} {:d "~@a"}]]
+          :argv [[{:a "b"} {:b "«a"} {:c "«b"} {:d "«a"}]]
           :expected {:a "b" :b "b" :c "b" :d "b"}}
          {:label (str "When `provides` is a sequential collection, each of its items can be "
                       "any appropriate type.")
-          :argv [[{:a "b"} "c" {:key "d" :value "~@c"}] {:env {:c "d"}}]
+          :argv [[{:a "b"} "c" {:key "d" :value "«c"}] {:env {:c "d"}}]
           :expected {:a "b" :c "d" :d "d"}}
          {:label (str "Conflicts between the body env and the input-env should allow the "
                       "body env to win.")
-          :argv [{:a "~@a" :b "~@b"} {:env {:a "b"}} {:a "z" :b "y"}]
+          :argv [{:a "«a" :b "«b"} {:env {:a "b"}} {:a "z" :b "y"}]
           :expected {:a "b" :b "y"}}
          {:label (str "When `provides` is empty, only the input-env should pass through.")
           :argv [nil [{:env {:a "b" :c "d"}}] {:a "z" :b "y"}]

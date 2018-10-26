@@ -11,7 +11,8 @@
             [co.nclk.flax.core :as flax]
             )
   (:import co.nclk.linen.data.FileDataConnector
-           clojure.lang.MapEntry)
+           clojure.lang.MapEntry
+           LinenJNI)
   (:gen-class))
 
 
@@ -72,7 +73,7 @@
   [p]
   (if (name-or-nil p)
     ;; TODO: something like `(flax/var-str p)`
-    {(keyword p) (str "~@" (name p))}
+    {(keyword p) (str "«" (name p))}
 
     (if (map? p)
       (if (-> p keys set (remove #{:key :value}) empty?)
@@ -127,7 +128,7 @@
                   :child (evaluate (:child m) (assoc config :env env))}))
 
         ;; Functions and special forms
-        (->> (keys m) (some #(-> % str (subs 1) (.startsWith "~("))))
+        (->> (keys m) (some #(-> % str (subs 1) (.startsWith "("))))
         (flax/evaluate m config evaluate)
 
         ;; Modules

@@ -1,7 +1,7 @@
 (ns co.nclk.linen.node
-  (:require [clojure.tools.logging :as logging]
-            [clj-ssh.ssh :as ssh])
-  (:import java.util.concurrent.TimeUnit)
+  (:require [clojure.tools.logging :as logging])
+  (:import java.util.concurrent.TimeUnit
+           LinenJNI)
   (:gen-class))
 
 
@@ -151,9 +151,9 @@
 
       (when-not proxy?
         (spit tmpfile-name (:source checkpoint))
-        (-> (java.io.File. tmpfile-name) (.setExecutable true))
-        (Thread/sleep 500)
-        )
+        (let [exe (java.io.File. tmpfile-name)]
+          (.setExecutable exe true)
+          (while (not (.canExecute exe)))))
 
       (when *log*
 
@@ -188,6 +188,12 @@
           (log-result nil nil exit "local" nil (:runid checkpoint)))
         result))))
 
+
+(defn checkpoint-logger
+  [short-name public-ip runid]
+  (fn [lvl & msgs]
+    (log lvl short-name public-ip runid (clojure.string/join " " msgs))))
+    
 
 (defn resolve-remote-checkpoint
   [node checkpoint]

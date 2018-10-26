@@ -8,7 +8,7 @@ provides:
 ---
 
 checkpoint:
-  source: echo hello ~{{message}}
+  source: echo hello «{{message}}
   nodes:
   - stdout: message
 

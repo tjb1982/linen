@@ -16,5 +16,5 @@ parent:
 - {module: emergency/modules/hello-world, outputs: message, inputs: {message: "world"}}
 child:
 - checkpoint:
-    source: "echo ~{message} is the message"
+    source: "echo «{message} is the message"
 
