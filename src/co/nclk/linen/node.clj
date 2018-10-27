@@ -15,6 +15,7 @@
 (defprotocol PNodeManager
   (get-node [self node runid])
   (invoke [self node-label checkpoint])
+  (clean [self failed?])
   (full-node-name [self node]))
 
 
@@ -437,6 +438,14 @@
         (dissoc checkpoint :source :stdout :stderr)
         checkpoint)
     ))
+  (clean [self failed?]
+    (doall
+      (pmap
+        (fn [[k n]]
+          (when (:data n)
+            (destroy n failed?))
+          (swap! nodes #(dissoc % k)))
+        @nodes)))
   (full-node-name [self node]
     (cond
       (string? node)
