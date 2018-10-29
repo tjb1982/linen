@@ -21,6 +21,7 @@
 (def seed 8031)
 (def base-config
   {:effective seed
+   :env {}
    :node-manager (node-manager seed {})
    :data-connector res-conn
    :runnable? (atom true)
@@ -38,7 +39,7 @@
       (is (every? #(.contains (-> r2 .getMessage) (name %)) linen/config-keyset))))
 
   (testing "config-pre-check works in a program run"
-    (let [r (linen/run {:effective 8031 :main [{:name ""} {}]})]
+    (let [r (linen/run {:effective 8031 :env nil :main [{:name ""} {}]})]
       (-> r nil? not is))))
 
 
@@ -83,7 +84,7 @@
         ]]
     (doseq [test-cases [test-cases (-> "normalize-module.yaml" slurp-test)]
             tcidx (range 0 (count test-cases))]
-      (let [tc (linen/evaluate (nth test-cases tcidx) {})
+      (let [tc (linen/evaluate (nth test-cases tcidx) {:env nil})
             module (linen/normalize-module (first tc))]
         (testing (yaml/generate-string {tcidx tc})
           (-> module (= (second tc)) is))))))
@@ -285,7 +286,15 @@
           (-> r first :child :child k nil? is))))
     ))
 
-(deftest experiment
+(deftest trigger-text-file-busy
   (let [module (-> "run3.yaml" slurp-test)
-        _ (println module)
         r (linen/evaluate module base-config)]))
+
+(deftest with-stdin
+  (let [module [{:name "stdin-test"}
+                {:checkpoint {:nodes [{:stdin "hello world"}]
+                              :assert true
+                              :command "cat"}}]
+        r (linen/evaluate module base-config)]
+    (-> r second :checkpoint first :stdout :value (= "hello world") is)
+    (-> r second :checkpoint first :success :value true? is)))

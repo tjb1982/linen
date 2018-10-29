@@ -109,6 +109,7 @@
 
 (defn evaluate
   [m config]
+  (assert (contains? config :env) "linen: config must have entry for `:env`")
   (let [config (if (:merge-global-environment config)
                  (assoc config :env
                                (merge ((:genv config))
