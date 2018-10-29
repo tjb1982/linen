@@ -14,7 +14,7 @@
 
 (defprotocol PNodeManager
   (get-node [self node runid])
-  (invoke [self node-label checkpoint])
+  (invoke [self checkpoint node])
   (clean [self failed?])
   (full-node-name [self node]))
 
@@ -135,18 +135,21 @@
 
 
 (defn exec-retry-text-file-busy
-  [argv]
-  (let [ret
+  [argv & [stdin]]
+  (let [proc
         (try
-          (-> (Runtime/getRuntime)
-            (.exec (into-array String argv)))
+          (let [proc (-> (Runtime/getRuntime)
+                       (.exec (into-array String argv)))]
+            (when-not (clojure.string/blank? stdin)
+              (spit (.getOutputStream proc) stdin))
+            proc)
           (catch java.io.IOException ioe
             ;; XXX: https://bugs.openjdk.java.net/browse/JDK-8068370
             (if (-> ioe .getMessage (.endsWith "error=26, Text file busy"))
               ;; "Text file busy"
               nil
               (throw ioe))))]
-    (if-not ret (recur argv) ret)))
+    (if-not proc (recur argv stdin) proc)))
 
 
 
@@ -163,7 +166,9 @@
                           (clojure.string/split
                             (invocation-string d tmpfile-name)
                             #" ")
-                          tmpfile-name
+                          (if-let [command (:command checkpoint)]
+                            command
+                            tmpfile-name)
                           )])))]
 
       (when-not proxy?
@@ -188,7 +193,7 @@
                ":\n"
                (:source checkpoint))))
 
-      (let [proc (exec-retry-text-file-busy argv)
+      (let [proc (exec-retry-text-file-busy argv (-> checkpoint :node :stdin))
             {:keys [stdout stderr exit]}
             (wait-with-log proc (:timeout checkpoint) (:runid checkpoint))
             result
