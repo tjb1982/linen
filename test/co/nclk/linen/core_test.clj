@@ -23,7 +23,8 @@
   {:effective seed
    :node-manager (node-manager seed {})
    :data-connector res-conn
-   :failed? (atom false)})
+   :runnable? (atom true)
+   :failed? (promise)})
 
 
 (deftest config-pre-check-test

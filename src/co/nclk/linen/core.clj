@@ -4,7 +4,7 @@
             [cheshire.generate :refer [add-encoder encode-str]]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :as logging]
-            [co.nclk.linen.node :refer [invoke destroy node-manager log]]
+            [co.nclk.linen.node :refer [invoke destroy node-manager clean log]]
             [co.nclk.linen.data :refer [resolve-module resolve-program]]
             [stencil.parser :refer [parse]]
             [stencil.core :refer [render]]
@@ -167,7 +167,7 @@
         resolved (assoc-in resolved [:success :value] success)]
 
     (when (not (true? success))
-      (swap! (:failed? config) (fn [_] true))
+      (deliver (:failed? config) true)
       (log :debug (with-out-str (clojure.pprint/pprint resolved)))
       (log :error (str "[" (:runid resolved) "] Failed.")))
 
@@ -382,14 +382,16 @@
       (map (fn [[k v]] [(keyword k) v]))))
 
 
-(defn clean-up
-  [node-manager & [failed?]]
-  (doall
-    (pmap
-      (fn [[k n]]
-        (when (:data n)
-          (destroy n failed?)))
-      @(-> node-manager :nodes))))
+(defn clean-up-fn
+  [node-manager runnable? failed?]
+  (fn []
+    (deliver failed? false)
+    (swap! runnable? (constantly false))
+    (when-not (empty? @(:nodes node-manager))
+      (log :info "Cleaning up.")
+      (clean node-manager @failed?)
+      (log :info "Done cleaning up.")
+    )))
 
 
 (defn run
@@ -404,16 +406,16 @@
                                :runnable? (atom true)
                                :node-manager (node-manager effective callbacks)
                                :genv (or (:genv config) genv)
-                               :failed? (atom false))
+                               :failed? (promise))
           {module :main
            nm :node-manager
+           runnable? :runnable?
            failed? :failed?} config
-          _ (log :info (str "Seed: " (.getTime effective)))
-          result (try (run-module module config)
-                   (finally
-                     (log :info "Cleaning up.")
-                     (clean-up nm @failed?)
-                     (log :info "Done cleaning up.")))]
+          clean-up (clean-up-fn nm runnable? failed?)]
+      (-> (Runtime/getRuntime) (.addShutdownHook (Thread. clean-up)))
       (log :info (str "Seed: " (.getTime effective)))
-      result)))
+      (let [result (run-module module config)]
+        (clean-up)
+        (log :info (str "Seed: " (.getTime effective)))
+        result))))
 
