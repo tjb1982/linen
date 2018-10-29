@@ -167,7 +167,7 @@
         resolved (assoc-in resolved [:success :value] success)]
 
     (when (not (true? success))
-      (swap! (:failed? config) (fn [_] true))
+      (deliver (:failed? config) true)
       (log :debug (with-out-str (clojure.pprint/pprint resolved)))
       (log :error (str "[" (:runid resolved) "] Failed.")))
 
@@ -385,7 +385,8 @@
 (defn clean-up-fn
   [node-manager runnable? failed?]
   (fn []
-    (swap! runnable? #(do % false))
+    (deliver failed? false)
+    (swap! runnable? (constantly false))
     (when-not (empty? @(:nodes node-manager))
       (log :info "Cleaning up.")
       (clean node-manager @failed?)
@@ -405,7 +406,7 @@
                                :runnable? (atom true)
                                :node-manager (node-manager effective callbacks)
                                :genv (or (:genv config) genv)
-                               :failed? (atom false))
+                               :failed? (promise))
           {module :main
            nm :node-manager
            runnable? :runnable?
