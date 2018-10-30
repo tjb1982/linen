@@ -166,8 +166,8 @@
                           (clojure.string/split
                             (invocation-string d tmpfile-name)
                             #" ")
-                          (if-let [command (:command checkpoint)]
-                            command
+                          (if-let [command (:argv checkpoint)]
+                            (map str command)
                             tmpfile-name)
                           )])))]
 
@@ -214,7 +214,20 @@
   [short-name public-ip runid]
   (fn [lvl & msgs]
     (log lvl short-name public-ip runid (clojure.string/join " " msgs))))
-    
+
+
+(defn ssh-exec
+  [node user cmd]
+  (-> (Runtime/getRuntime)
+      (.exec (into-array String
+                         ["ssh" "-T" "-q"
+                          (format "%s@%s" (:ssh-user node) (:public_ip node))
+                          "-i" (:private-key-file node)
+                          "-o" "StrictHostKeyChecking=no"
+                          "-o" "UserKnownHostsFile=/tmp/linen-knownhosts"
+                          (format "sudo su %s -l -c \"%s\"" user cmd)
+                          ]))))
+
 
 (defn resolve-remote-checkpoint
   [node checkpoint]
@@ -226,44 +239,46 @@
                (clojure.string/trim
                  (:display checkpoint))))
 
-  (try
+  (let [tmpfile-name (str "./" (tempfile-name false))
+        checkpoint-user (or (:user checkpoint) "root")]
 
     (when *log*
       (log :debug (:short-name @node)
                   (:public_ip @node)
                   (:runid checkpoint)
-                  (clojure.string/trim
-                    (:source checkpoint))))
+                  (if (:source checkpoint)
+                    (clojure.string/trim (:source checkpoint))
+                    (clojure.string/join " " (:argv checkpoint)))))
 
-    (let [tmpfile-name (str "./" (tempfile-name false))
-          terminator (:runid checkpoint)
-          instr (str "cat <<-" terminator " > " tmpfile-name
-                     (heredoc-src (:source checkpoint) terminator)
-                     "chmod a+x " tmpfile-name
-                     "; " (invocation-string
-                            (:invocation checkpoint)
-                            tmpfile-name)
-                     "; rc=$?"
-                     "; rm " tmpfile-name
-                     "; exit $rc")
-          ;;_ (do (println "CHESTER: " instr)) ;; (System/exit 0))
-          proc (-> (Runtime/getRuntime)
-                   (.exec (into-array String
-                                      ["ssh" "-T" "-q"
-                                       (format "%s@%s" (:ssh-user @node) (:public_ip @node))
-                                       "-i" (:private-key-file @node)
-                                       "-o" "StrictHostKeyChecking=no"
-                                       "-o" "UserKnownHostsFile=/tmp/linen-knownhosts"
-                                       "sudo" "su" (or (:user checkpoint) "root")])))
-          stdin (.getOutputStream proc)]
-      (spit stdin instr)
+    (when (:source checkpoint)
+      (let [catproc (ssh-exec @node
+                              checkpoint-user
+                              (format "cat > %s && chmod +x %s" tmpfile-name tmpfile-name))]
+        (spit (.getOutputStream catproc) (:source checkpoint))
+        (wait-with-log catproc (:timeout checkpoint) (:runid checkpoint))))
+
+    (let [cmdproc (ssh-exec @node
+                         checkpoint-user
+                         (if-let [argv (:argv checkpoint)]
+                           (clojure.string/join " " argv)
+                           (invocation-string (:invocation checkpoint) tmpfile-name)))
+          stdin (.getOutputStream cmdproc)]
+
+      (when-let [instr (-> checkpoint :node :stdin)]
+        (spit stdin instr))
+
       (let [{:keys [stdout stderr exit]}
-            (wait-with-log proc (:timeout checkpoint) (:runid checkpoint))]
+            (wait-with-log cmdproc (:timeout checkpoint) (:runid checkpoint))]
+
         (when *log*
           (log-result stdout stderr exit
                       (:short-name @node)
                       (:public_ip @node)
                       (:runid checkpoint)))
+
+        (when (:source checkpoint)
+          (let [rmproc (ssh-exec @node checkpoint-user (format "rm %s" tmpfile-name))]
+            (wait-with-log rmproc (:timeout checkpoint) (:runid checkpoint))))
 
         (assoc checkpoint :stdout {:keys (:stdout checkpoint)
                                    :value stdout}
@@ -322,7 +337,7 @@
   (if (:proxy checkpoint)
     (invoke-local checkpoint (proxy node checkpoint))
     (let [node (:data node)]
-      (if-not (:source checkpoint)
+      (if-not (some (partial contains? checkpoint) #{:source :argv})
         (assoc checkpoint :public_ip (:public_ip @node)
                           :stdout {:keys (:stdout checkpoint)
                                    :value ""}
@@ -440,7 +455,7 @@
       (if (and checkpoint
                (false? (:log checkpoint)))
         ;; disable these keys for checkpoint recording, too, if :log is false
-        (dissoc checkpoint :source :stdout :stderr)
+        (dissoc checkpoint :source :argv :stdout :stderr)
         checkpoint)
     ))
   (clean [self failed?]
