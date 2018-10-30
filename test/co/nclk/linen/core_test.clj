@@ -291,10 +291,14 @@
         r (linen/evaluate module base-config)]))
 
 (deftest with-stdin
-  (let [module [{:name "stdin-test"}
-                {:checkpoint {:nodes [{:stdin "hello world"}]
-                              :assert true
-                              :command "cat"}}]
-        r (linen/evaluate module base-config)]
-    (-> r second :checkpoint first :stdout :value (= "hello world") is)
-    (-> r second :checkpoint first :success :value true? is)))
+  (testing "local node"
+    (let [module [{:name "stdin-test"}
+                  {:checkpoint {:nodes [{:stdin "hello world"}]
+                                :assert true
+                                :argv ["cat"]}}]
+          r (linen/evaluate module base-config)]
+      (-> r second :checkpoint first :stdout :value (= "hello world") is)
+      (-> r second :checkpoint first :success :value true? is)))
+  ;;(testing "remote node"
+  ;;  (let [module [{:name "stdin-test"}
+  )
