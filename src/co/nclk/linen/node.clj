@@ -69,7 +69,7 @@
                     (log :debug "local" nil runid line)
                     (recur (conj lines line))))))))
         exit (if timeout
-               (if-let [timed-out? (not (.waitFor proc timeout TimeUnit/MINUTES))]
+               (if-let [timed-out? (not (.waitFor proc timeout TimeUnit/MILLISECONDS))]
                  -1 (.exitValue proc))
                (.waitFor proc))
         out (clojure.string/join "\n" @out)
@@ -396,7 +396,7 @@
     [(:ssh-user node) "root"]))
 
 
-(defrecord NodeManager [nodes effective version context]
+(defrecord NodeManager [nodes effective version timeout context]
   PNodeManager
   (get-node [self node runid]
     (cond
@@ -442,6 +442,8 @@
             @n))))
   (invoke [self checkpoint node]
     (let [started (java.util.Date.)
+          timeout (:timeout checkpoint (:timeout node))
+          checkpoint (assoc checkpoint :timeout timeout)
           p (future
               (assoc (if (= "local" (full-node-name self node))
                        (invoke-local checkpoint)
@@ -451,16 +453,18 @@
                            (invoke-remote checkpoint node))))
                      :started (.getTime started)
                      :finished (.getTime (java.util.Date.))))
-          timeout (:timeout checkpoint (:timeout node (* 1000 60 15)))
+          fatal-timeout (or (when timeout (+ timeout 5000)) (:timeout self))
           resolved (when-not (:abandon checkpoint)
-                     (deref p
-                       timeout
-                       (ex-info
-                         (format "linen: checkpoint timed out after %.02f seconds"
-                                 (float (/ timeout 1000)))
-                         {:checkpoint 
-                          (assoc checkpoint :started
-                                            (.getTime started))})))]
+                     (if (nil? fatal-timeout)
+                       @p
+                       (deref p
+                         fatal-timeout
+                         (ex-info
+                           (format "linen: node-manager: checkpoint timed out after %.02f seconds"
+                                   (float (/ fatal-timeout 1000)))
+                           {:checkpoint 
+                            (assoc checkpoint :started
+                                              (.getTime started))}))))]
 
       (when (ex-data resolved)
         (throw resolved))
@@ -492,10 +496,11 @@
 
 
 (defn node-manager
-  [effective callbacks & [version]]
+  [effective callbacks & {:keys [version timeout]}]
   (alter-var-root #'log (fn [_] (partial log* callbacks)))
   (NodeManager. (atom {"local" (LocalNode.)})
                 effective
                 (or version 0)
+                timeout
                 (atom {})))
 
