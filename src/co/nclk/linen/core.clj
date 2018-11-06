@@ -406,7 +406,8 @@
     (let [effective (java.util.Date. (long (:effective config)))
           config (assoc config :effective effective
                                :runnable? (atom true)
-                               :node-manager (node-manager effective callbacks)
+                               :node-manager (node-manager effective callbacks
+                                               :timeout (:node-manager-timeout config))
                                :genv (or (:genv config) genv)
                                :failed? (promise))
           {module :main
