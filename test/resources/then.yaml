@@ -1,0 +1,42 @@
+parent:
+  module:
+  - requires:
+    - FOO
+    provides:
+    - MESSAGE1
+    - key: OUT_MSGS
+      value: «MESSAGES
+  - checkpoint:
+      source: echo hello «{FOO.name}
+      nodes:
+      - stdout: MESSAGE1
+      - stdout: MESSAGE2
+      stdout: MESSAGES
+  inputs:
+    FOO: «FOO
+  outputs:
+    MY_MSG: «MESSAGE1
+    MY_MSGS: «OUT_MSGS
+child:
+- module:
+  - requires:
+    - IN_MSG
+    - IN_MSGS
+  - - checkpoint:
+        source: "echo this is a test: «{IN_MSG} «{#IN_MSGS}«{{.}} «{/IN_MSGS}"
+  inputs:
+    IN_MSG: «MY_MSG
+    IN_MSGS: «MY_MSGS
+- module:
+  - (parallel:
+    - checkpoint:
+        source: echo «{MESSAGE1}
+    - checkpoint:
+        source: echo «{MESSAGE2}
+    - checkpoint:
+        source: echo «{IN_MSG}
+    - checkpoint:
+        source: echo «{MY_MSG}
+- then:
+  - «MY_MSG
+

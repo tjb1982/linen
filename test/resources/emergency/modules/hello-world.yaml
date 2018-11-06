@@ -1,0 +1,14 @@
+name: emergency/modules/hello-world
+requires:
+- message
+
+provides:
+- message
+
+---
+
+checkpoint:
+  source: echo hello «{{message}}
+  nodes:
+  - stdout: message
+

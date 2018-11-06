@@ -10,5 +10,6 @@
   (resolve-module [self s]
     (mhandler s)))
 
-(defn connector [phandler mhandler]
-  (HandlerDataConnector. phandler mhandler))
+(defn connector [program-handler module-handler]
+  (HandlerDataConnector. program-handler module-handler))
+

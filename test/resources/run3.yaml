@@ -1,0 +1,23 @@
+name: experiment
+
+requires:
+
+---
+
+(upmap:
+- (fn:
+  - []
+  - checkpoint:
+      source: |
+        cat <<-EOF
+        hhello world hello world hello world hello world ello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello worldo 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world 
+        hello world hello world hello world hello world hello world hello world hello world 
+        EOF
+- (range: [0, 1000]
+

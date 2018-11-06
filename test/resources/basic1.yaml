@@ -1,0 +1,15 @@
+name: a test
+requires:
+- key: FOO
+provides:
+- key: MESSAGE
+  value: «MESSAGE
+
+---
+
+checkpoint:
+  source: echo hello «{FOO.name}
+  assert: true
+  nodes:
+  - stdout: MESSAGE
+

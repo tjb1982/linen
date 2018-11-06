@@ -1,0 +1,9 @@
+name: stdin-test
+
+---
+
+checkpoint:
+  nodes: [{stdin: hello world}]
+  assert: true
+  argv: ["cat"]
+

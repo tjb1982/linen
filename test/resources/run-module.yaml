@@ -1,0 +1,295 @@
+label: Hello world.
+env: {}
+module:
+- name: test1
+  requires:
+  provides:
+- checkpoint: &cp
+    display: Echoing hello
+    source: echo hello
+expected:
+  header:
+    name: test1
+    requires:
+    provides:
+  env: {}
+  body:
+  - checkpoint:
+    - <<: *cp
+      stdout: {keys: [null, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
+
+---
+
+label: Hello world with provides.
+env: {}
+module:
+- name: test1
+  requires:
+  provides:
+  - FOO
+- checkpoint:
+    display: Echoing hello
+    source: echo hello
+    nodes:
+    - stdout: FOO
+expected:
+  header:
+    name: test1
+    requires:
+    provides:
+    - FOO
+  env: {FOO: hello}
+  body:
+  - checkpoint:
+    - display: Echoing hello
+      source: echo hello
+      stdout: {keys: [null, FOO], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {stdout: "FOO", name: local}
+      user:
+      proxy:
+    env: {FOO: "hello"}
+
+---
+
+label: Hello world with provides (multi-node)
+env: {}
+module:
+- name: test1
+  requires:
+  provides:
+  - FOO
+- checkpoint:
+    display: Echoing hello
+    source: echo hello
+    stdout: FOO
+    nodes:
+    - {}
+    - 
+expected:
+  header:
+    name: test1
+    requires:
+    provides:
+    - FOO
+  env: {FOO: [hello, hello]}
+  body:
+  - checkpoint:
+    - &cp
+      display: Echoing hello
+      source: echo hello
+      stdout: {keys: [FOO, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    - *cp
+    env: {FOO: [hello, hello]}
+
+---
+
+label: Hello world with requires.
+env: {FOO: bar}
+module:
+- name: test1
+  requires:
+  - FOO
+  provides:
+- checkpoint:
+    display: Echoing hello «{FOO}
+    source: echo hello «{FOO}
+expected:
+  header:
+    name: test1
+    requires:
+    - FOO
+    provides:
+  env: {FOO: bar}
+  body:
+  - checkpoint:
+    - display: Echoing hello bar
+      source: echo hello bar
+      stdout: {keys: [null, null], value: "hello bar"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
+
+---
+
+label: Hello world with requires and provides.
+env: {FOO: "bar"}
+module:
+- name: test1
+  requires:
+  - FOO
+  provides:
+  - key: FOO
+    value: «FOO
+- checkpoint:
+    display: Echoing hello «{FOO}
+    source: echo hello «{FOO}
+    nodes:
+    - stdout: FOO
+expected:
+  header:
+    name: test1
+    requires:
+    - FOO
+    provides:
+    - key: FOO
+      value: «FOO
+  env: {FOO: hello bar}
+  body:
+  - checkpoint:
+    - display: Echoing hello bar
+      source: echo hello bar
+      stdout: {keys: [null, FOO], value: "hello bar"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local, stdout: FOO}
+      user:
+      proxy:
+    env: {FOO: hello bar}
+
+---
+
+label: Hello world with requires having default.
+env: {}
+module:
+- name: test1
+  requires:
+  - key: FOO
+    default: bar
+- checkpoint:
+    display: Echoing hello «{FOO}
+    source: echo hello «{FOO}
+expected:
+  header:
+    name: test1
+    requires:
+    - key: FOO
+      default: bar
+  env: {FOO: bar}
+  body:
+  - checkpoint:
+    - display: Echoing hello bar
+      source: echo hello bar
+      stdout: {keys: [null, null], value: "hello bar"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
+
+---
+
+label: >-
+  Hello world with `:provides` having differing structure
+  should not effect the checkpoint's env.
+env: {}
+module:
+- name: test1
+  provides:
+    obj:
+      foo: «FOO
+- checkpoint:
+    display: Echoing hello
+    source: echo hello
+    nodes:
+    - stdout: FOO
+expected:
+  header:
+    name: test1
+    provides:
+      obj:
+        foo: «FOO
+  env: {obj: {foo: "hello"}}
+  body:
+  - checkpoint:
+    - display: Echoing hello
+      source: echo hello
+      stdout: {keys: [null, FOO], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local, stdout: FOO}
+      user:
+      proxy:
+    env: {FOO: "hello"}
+
+---
+
+label: Hello world with assert fn.
+env: {}
+module:
+- name: test1
+- checkpoint: &cp
+    display: Echoing hello
+    source: echo hello
+    assert:
+      (fn:
+      - [out, err, exit]
+      - (=: [«out, "hello"]
+expected:
+  header:
+    name: test1
+  env: {}
+  body:
+  - checkpoint:
+    - <<: *cp
+      stdout: {keys: [null, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: true}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
+
+---
+
+label: Hello world with assert fn that fails.
+env: {}
+module:
+- name: test1
+- checkpoint: &cp
+    display: Echoing hello
+    source: echo hello
+    assert:
+      (fn:
+      - [out, err, exit]
+      - (clojure.string/blank?: [«out]
+expected:
+  header:
+    name: test1
+  env: {}
+  body:
+  - checkpoint:
+    - <<: *cp
+      stdout: {keys: [null, null], value: "hello"}
+      stderr: {keys: [null, null], value: ""}
+      exit: {keys: [null, null], value: 0}
+      success: {keys: [null, null], value: false}
+      node: {name: local}
+      user:
+      proxy:
+    env: {}
+
