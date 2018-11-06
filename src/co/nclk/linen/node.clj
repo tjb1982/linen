@@ -135,7 +135,7 @@
 
 
 (defn exec-retry-text-file-busy
-  [argv & [stdin]]
+  [argv stdin]
   (let [proc
         (try
           (let [proc (-> (Runtime/getRuntime)

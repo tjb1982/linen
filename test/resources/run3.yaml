@@ -4,7 +4,7 @@ requires:
 
 ---
 
-(pmap:
+(upmap:
 - (fn:
   - []
   - checkpoint:
@@ -19,5 +19,5 @@ requires:
         hello world hello world hello world hello world hello world hello world 
         hello world hello world hello world hello world hello world hello world hello world 
         EOF
-- (range: [0, 100]
+- (range: [0, 1000]
 
