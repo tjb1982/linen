@@ -441,23 +441,35 @@
                                    @n))
             @n))))
   (invoke [self checkpoint node]
-    (let [res (future
-                (let [ts (java.util.Date.)]
-                  (assoc (if (= "local" (full-node-name self node))
+    (let [started (java.util.Date.)
+          p (future
+              (assoc (if (= "local" (full-node-name self node))
+                       (invoke-local checkpoint)
+                       (let [node (get-node self node (:runid checkpoint))]
+                         (if (nil? (:data node))
                            (invoke-local checkpoint)
-                           (let [node (get-node self node (:runid checkpoint))]
-                             (if (nil? (:data node))
-                               (invoke-local checkpoint)
-                               (invoke-remote checkpoint node))))
-                         :started (.getTime ts)
-                         :finished (.getTime (java.util.Date.)))))
-          checkpoint (when-not (:abandon checkpoint) @res)]
-      (if (and checkpoint
-               (false? (:log checkpoint)))
+                           (invoke-remote checkpoint node))))
+                     :started (.getTime started)
+                     :finished (.getTime (java.util.Date.))))
+          timeout (:timeout checkpoint (:timeout node (* 1000 60 15)))
+          resolved (when-not (:abandon checkpoint)
+                     (deref p
+                       timeout
+                       (ex-info
+                         (format "linen: checkpoint timed out after %.02f seconds"
+                                 (float (/ timeout 1000)))
+                         {:checkpoint 
+                          (assoc checkpoint :started
+                                            (.getTime started))})))]
+
+      (when (ex-data resolved)
+        (throw resolved))
+
+      (if (and resolved
+               (false? (:log resolved)))
         ;; disable these keys for checkpoint recording, too, if :log is false
-        (dissoc checkpoint :source :argv :stdout :stderr)
-        checkpoint)
-    ))
+        (dissoc resolved :source :argv :stdout :stderr)
+        resolved)))
   (clean [self failed?]
     (doall
       (pmap
