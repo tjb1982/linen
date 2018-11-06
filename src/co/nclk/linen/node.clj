@@ -56,10 +56,17 @@
      (str "Hostname: " (:public_ip node))]))
 
 
+(defn private-field [obj fn-name-string]
+  (let [m (.. obj getClass (getDeclaredField fn-name-string))]
+    (. m (setAccessible true))
+    (. m (get obj))))
+
 (defn wait-with-log
   [proc timeout runid]
-  (let [[out err]
-        (for [stream (proc-output-streams proc)]
+  (log :trace {:pid (private-field proc "pid") :runid runid})
+  (let [streams (proc-output-streams proc)
+        [out err]
+        (for [stream streams]
           (future
             (loop [lines []]
               (let [line (.readLine stream)]
@@ -70,10 +77,13 @@
                     (recur (conj lines line))))))))
         exit (if timeout
                (if-let [timed-out? (not (.waitFor proc timeout TimeUnit/MILLISECONDS))]
-                 -1 (.exitValue proc))
+                 (do
+                   (.destroyForcibly proc)
+                   -1)
+                 (.exitValue proc))
                (.waitFor proc))
-        out (clojure.string/join "\n" @out)
-        err (clojure.string/join "\n" @err)]
+        out (when-not (neg? exit) (clojure.string/join "\n" @out))
+        err (when-not (neg? exit) (clojure.string/join "\n" @err))]
     {:stdout out :stderr err :exit exit}))
 
 
