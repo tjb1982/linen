@@ -10,7 +10,7 @@
                  [stencil "0.5.0"]
                  [cheshire "5.8.0"]
                  [clj-ssh "0.5.14"]
-                 [co.nclk/clj-yaml "1.0.0"]
+                 [co.nclk/clj-yaml "1.1.0-SNAPSHOT"]
                  ;[co.nclk/flax "2.0.5"]
                  [co.nclk/flax "4.0.0-SNAPSHOT"]
                  ]

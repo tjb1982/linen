@@ -63,28 +63,30 @@
 
 (defn wait-with-log
   [proc timeout runid]
-  (log :trace {:pid (private-field proc "pid") :runid runid})
-  (let [streams (proc-output-streams proc)
-        [out err]
-        (for [stream streams]
-          (future
-            (loop [lines []]
-              (let [line (.readLine stream)]
-                (if (nil? line)
-                  lines
-                  (do
-                    (log :debug "local" nil runid line)
-                    (recur (conj lines line))))))))
-        exit (if timeout
-               (if-let [timed-out? (not (.waitFor proc timeout TimeUnit/MILLISECONDS))]
-                 (do
-                   (.destroyForcibly proc)
-                   -1)
-                 (.exitValue proc))
-               (.waitFor proc))
-        out (when-not (neg? exit) (clojure.string/join "\n" @out))
-        err (when-not (neg? exit) (clojure.string/join "\n" @err))]
-    {:stdout out :stderr err :exit exit}))
+  (let [pid (private-field proc "pid")]
+    (log :trace {:pid pid :runid runid})
+    (let [streams (proc-output-streams proc)
+          [out err]
+          (for [stream streams]
+            (future
+              (loop [lines []]
+                (let [line (.readLine stream)]
+                  (if (nil? line)
+                    lines
+                    (do
+                      (log :debug "local" nil runid line)
+                      (recur (conj lines line))))))))
+          exit (if timeout
+                 (if-let [timed-out? (not (.waitFor proc timeout TimeUnit/MILLISECONDS))]
+                   (do
+                     (.destroyForcibly proc)
+                     -1)
+                   (.exitValue proc))
+                 (.waitFor proc))
+          out (when-not (neg? exit) (clojure.string/join "\n" @out))
+          err (when-not (neg? exit) (clojure.string/join "\n" @err))]
+      (log :trace {:pid (private-field proc "pid") :runid runid :exit exit})
+      {:stdout out :stderr err :exit exit})))
 
 
 (defn resolve-connector
@@ -483,7 +485,7 @@
                (false? (:log resolved)))
         ;; disable these keys for checkpoint recording, too, if :log is false
         (dissoc resolved :source :argv :stdout :stderr)
-        resolved)))
+        (dissoc resolved :timeout))))
   (clean [self failed?]
     (doall
       (pmap
