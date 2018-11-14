@@ -1,4 +1,4 @@
-(defproject co.nclk/linen "4.0.0-SNAPSHOT"
+(defproject co.nclk/linen "4.0.0"
   :description "Implementation of an interpreter for linen, a domain specific
                language for modeling coordinated, distributed processes."
   :url "https://github.com/tjb1982/linen"
@@ -10,9 +10,9 @@
                  [stencil "0.5.0"]
                  [cheshire "5.8.0"]
                  [clj-ssh "0.5.14"]
-                 [co.nclk/clj-yaml "1.1.0-SNAPSHOT"]
+                 [co.nclk/clj-yaml "1.1.0"]
                  ;[co.nclk/flax "2.0.5"]
-                 [co.nclk/flax "4.0.0-SNAPSHOT"]
+                 [co.nclk/flax "4.0.0"]
                  ]
   :profiles {:dev {:dependencies [[pjstadig/humane-test-output "0.8.3"]]
                    :injections [(require 'pjstadig.humane-test-output)
