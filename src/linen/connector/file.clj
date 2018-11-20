@@ -1,12 +1,7 @@
-(ns co.nclk.linen.data
-  (:require [clj-yaml.core :as yaml])
+(ns linen.connector.file
+  (:require [clj-yaml.core :as yaml]
+            [linen.data :as data])
   (:gen-class))
-
-
-(defprotocol PDataConnector
-  (resolve-program [self m])
-  (resolve-module [self m]))
-
 
 (defn slurp-yaml
   [s]
@@ -18,9 +13,7 @@
 
 
 (defrecord FileDataConnector []
-  PDataConnector
-  (resolve-program [self s]
-    (slurp-yaml s))
+  data/PDataConnector
   (resolve-module [self s]
     (slurp-yaml s)))
  

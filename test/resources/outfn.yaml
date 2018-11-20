@@ -1,0 +1,37 @@
+name: outfn
+
+---
+
+parent:
+  module:
+  - name: lalala
+    requires: [RACHEL, TOM]
+    provides:
+    - FOO:
+        (fn:
+        - [env, output]
+        - (if:
+          - (contains?: [«output, «:foo]
+          - "smörgåsarna «{output.foo}"
+          - «env.FOO
+      BAZ: lalalax
+    - RACHEL
+    - TOM
+  - checkpoint:
+      nodes:
+      - stdout: foo
+      display: Would you like the sandwiches or smörgåsarna?
+      source: python --version
+  inputs: [RACHEL, TOM]
+  outputs:
+  - BAR: «FOO
+    QUUX: «BAZ
+  - FOO
+  - BAZ
+child:
+- «BAR
+- «QUUX
+- «FOO
+- «BAZ
+- «RACHEL
+- «TOM

@@ -1,4 +1,4 @@
-(ns co.nclk.linen.node
+(ns linen.node
   (:require [clojure.tools.logging :as logging])
   (:import java.util.concurrent.TimeUnit
            LinenJNI)
@@ -115,7 +115,7 @@
   (str (when-not (false? local)
          (str (System/getProperty "java.io.tmpdir")
               "/"))
-       ".linen-temp-script-"
+       "linen-temp-script-"
        (java.util.UUID/randomUUID)))
 
 (defn invocation-string
@@ -236,7 +236,7 @@
                           (format "%s@%s" (:ssh-user node) (:public_ip node))
                           "-i" (:private-key-file node)
                           "-o" "StrictHostKeyChecking=no"
-                          "-o" "UserKnownHostsFile=/tmp/linen-knownhosts"
+                          "-o" "UserKnownHostsFile=/tmp/.linen-knownhosts"
                           (format "sudo su %s -l -c \"%s\"" user cmd)
                           ]))))
 
@@ -432,7 +432,7 @@
                 n (-> (ctor context) (create node (full-node-name self node) runid))
                 short-name* (short-name node)
                 pktempfile (java.io.File/createTempFile
-                             "linen-pk-"
+                             ".linen-pk-"
                              (format "%s-%s" short-name* (:public_ip @(:data @n))))
                 pktempfile-path (.getCanonicalPath pktempfile)]
             (.deleteOnExit pktempfile)
@@ -484,7 +484,7 @@
       (if (and resolved
                (false? (:log resolved)))
         ;; disable these keys for checkpoint recording, too, if :log is false
-        (dissoc resolved :source :argv :stdout :stderr)
+        (dissoc resolved :timeout :source :argv :stdout :stderr)
         (dissoc resolved :timeout))))
   (clean [self failed?]
     (doall

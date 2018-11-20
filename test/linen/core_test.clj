@@ -1,16 +1,16 @@
-(ns co.nclk.linen.core-test
+(ns linen.core-test
   (:require [clojure.test :refer :all]
             [clj-yaml.core :as yaml]
-            [co.nclk.linen.node :refer [node-manager]]
-            ;;[co.nclk.linen.data :refer [connector]]
-            [co.nclk.linen.connector.handler :refer [connector]]
-            [co.nclk.linen.core :as linen]))
+            [linen.node :refer [node-manager]]
+            ;;[linen.data :refer [connector]]
+            [linen.connector.handler :refer [connector]]
+            [linen.core :as linen]))
 
 (def res-conn
   (let [handler 
         (fn [s]
           (-> s (str ".yaml") clojure.java.io/resource slurp yaml/parse-all))]
-    (connector handler handler)))
+    (connector handler)))
 
 (defn slurp-test
   [name*]
@@ -286,9 +286,9 @@
           (-> r first :child :child k nil? is))))
     ))
 
-(deftest trigger-text-file-busy
-  (let [module (-> "run3.yaml" slurp-test)
-        r (linen/evaluate module base-config)]))
+;;(deftest trigger-text-file-busy
+;;  (let [module (-> "run3.yaml" slurp-test)
+;;        r (linen/evaluate module base-config)]))
 
 (deftest with-stdin
   (testing "local node"
@@ -302,3 +302,13 @@
   ;;(testing "remote node"
   ;;  (let [module [{:name "stdin-test"}
   )
+
+(deftest function-in-output
+  (testing "can use a function instead of a map"
+    (let [module (-> "outfn.yaml" slurp-test)
+          r (linen/evaluate module (assoc base-config :env {:RACHEL "rachel" :TOM "tom"}))]
+      (clojure.pprint/pprint r)
+      (->> r second :child (map #(-> % clojure.string/blank? not is)) doall)
+      ))):w
+
+                   

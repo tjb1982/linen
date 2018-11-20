@@ -1,16 +1,16 @@
-(ns co.nclk.linen.core
+(ns linen.core
   (:require [clj-yaml.core :as yaml]
             [cheshire.core :as json]
             [cheshire.generate :refer [add-encoder encode-str]]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :as logging]
-            [co.nclk.linen.node :refer [invoke destroy node-manager clean log]]
-            [co.nclk.linen.data :refer [resolve-module resolve-program]]
+            [linen.node :refer [invoke destroy node-manager clean log]]
+            [linen.data :refer [resolve-module]]
             [stencil.parser :refer [parse]]
             [stencil.core :refer [render]]
-            [co.nclk.flax.core :as flax]
+            [flax.core :as flax]
             )
-  (:import co.nclk.linen.data.FileDataConnector
+  (:import linen.data.FileDataConnector
            clojure.lang.MapEntry
            LinenJNI)
   (:gen-class))
@@ -66,29 +66,55 @@
 
 (defn name-or-nil
   [x]
-  (try (name x) (catch Throwable t)))
+  (try
+    (cond
+      (string? x)
+      (name x)
+
+      (keyword? x)
+      (-> x str (subs 1))
+
+      (symbol? x)
+      (str x))
+    (catch Throwable t)))
 
 
 (defn normalize-output
   [p]
-  (if (name-or-nil p)
-    ;; TODO: something like `(flax/var-str p)`
-    {(keyword p) (str "«" (name p))}
+  (cond
+    (name-or-nil p)
+    {(keyword p) (flax/var p)}
 
-    (if (map? p)
-      (if (-> p keys set (remove #{:key :value}) empty?)
-        {(keyword (:key p)) (:value p)}
-        (into {} (->> p (map (fn [[k v]] {(keyword k) v}))))
-      ))))
+    (instance? clojure.lang.MapEntry p)
+    (normalize-output {(key p) (val p)})
+
+    (map? p)
+    (if (-> p keys set (remove #{:key :value}) empty?)
+      {(keyword (:key p)) (:value p)}
+      (into {} (->> p (map (fn [[k v]] {(keyword k) v})))))
+    ))
+
+
+;;(defn reduce-outputs
+;;  [bindings* env venv]
+;;  (let [bindings (if (sequential? bindings*) bindings* [bindings*])]
+;;    (->> bindings
+;;         (map normalize-output)
+;;         (reduce #(merge %1 (flax/evaluate %2 (merge %1 venv)))
+;;                 env))))
 
 
 (defn reduce-outputs
-  [bindings* env venv]
-  (let [bindings (if (sequential? bindings*) bindings* [bindings*])]
-    (->> bindings
-         (map normalize-output)
-         (reduce #(merge %1 (flax/evaluate %2 (merge %1 venv)))
-                 env))))
+  [bindings env venv]
+  (->> (if (sequential? bindings) bindings [bindings])
+       (map normalize-output)
+       (reduce #(let [entries (map
+                                (fn [[k v]]
+                                  (let [merger (flax/evaluate v (merge %1 venv))]
+                                    {k (if (fn? merger) (merger %1 venv) merger)}))
+                                %2)]
+                 (merge %1 (into {} entries)))
+               env)))
 
 
 (defn extract-module-env
@@ -136,10 +162,15 @@
         (contains? m :module)
         (let [{:keys [module inputs outputs]} m
               module (if-let [module-name (name-or-nil module)]
+                       ;; module-name is a string
                        (resolve-module
                          (:data-connector config)
                          (evaluate module-name config))
-                       module)
+                       ;; module is something else
+                       (if (sequential? module)
+                         ;; assume literal
+                         module
+                         (evaluate module config)))
               clean-env (reduce-outputs inputs {} (:env config))
               resolved-module (run-module module (assoc config :env clean-env))
               {provided-env :env} resolved-module
@@ -288,7 +319,7 @@
     (if (and (map? head)
              (->> head keys (remove #{:name :requires :provides}) empty?))
       (conj (rest module)
-            (if (-> head :name clojure.string/blank?)
+            (if (-> head :name str clojure.string/blank?)
               (assoc head :name nil) head))
       (conj module {:name nil}))))
 
@@ -298,7 +329,15 @@
   ;; TODO: allow {FOO: bar} to be equivalent to {key: FOO, default: bar}
   ;; also allow dictionary instead of (map normalize-require)
   ;; i.e., this should behave more like the `provides`/`outputs`
-  (if (string? r) {:key r} r))
+  (let [r (flax/evaluate r)]
+    (cond
+      (keyword? r)
+      {:key (-> r str (subs 1))}
+
+      (string? r)
+      {:key r}
+
+      :else r)))
 
 
 (defn run-module
@@ -306,37 +345,38 @@
   "
   [module* {env* :env :or {env* {}} :as config*}]
   (when (runnable? config*)
-    (let [module (normalize-module module*)
-          [{name* :name
-            requires* :requires
-            provides :provides
-            :as header} & body] module
-          requires (map normalize-require requires*)
-          requires-keyset (->> requires (map :key) (map keyword) set)
-          default-requires (->> requires (remove #(not (contains? % :default))))
-          non-default-keys (->> requires
-                                (remove (set default-requires))
-                                (map #(keyword (:key %))))
-          ;; Only keys that have been declared `:required` are allowed.
-          env (select-keys env* requires-keyset)
-          missing (->> non-default-keys (remove #(contains? env %)))]
+    (if (and (var? module*) (fn? (var-get module*)))
+      (module* config*)
+      (let [module (normalize-module module*)
+            [{name* :name
+              requires* :requires
+              provides :provides
+              :as header} & body] module
+            requires (map normalize-require requires*)
+            requires-keyset (->> requires (map :key) (map keyword) set)
+            default-requires (->> requires (remove #(not (contains? % :default))))
+            non-default-keys (->> requires
+                                  (remove (set default-requires))
+                                  (map #(keyword (:key %))))
+            ;; Only keys that have been declared `:required` are allowed.
+            env (select-keys env* requires-keyset)
+            missing (->> non-default-keys (remove #(contains? env %)))]
 
-      (if-not (empty? missing)
-        (throw (IllegalArgumentException.
-                 (str "Linen: module \"" name* "\" is missing inputs: " (set missing)))))
+        (if-not (empty? missing)
+          (throw (ex-info "linen: module is missing inputs"
+                          {:missing-inputs (set missing)
+                           :module name*})))
 
-      (let [default-env (-> (->> default-requires
-                                 (map (fn [{:keys [key default]}] [(keyword key) default]))
-                                 (into {}))
-                            (evaluate config*))
-            input-env (merge default-env env)
-            config (assoc config* :env input-env)
-            resolved-body (evaluate body config)
-            output-env (extract-module-env provides resolved-body input-env)]
-        ;;(flatten [(assoc header :env output-env) resolved-body]))
-        {:header header :env output-env :body resolved-body})
-        ;(flatten [header (evaluate body config)]))
-      )))
+        (let [default-env (-> (->> default-requires
+                                   (map (fn [{:keys [key default]}] [(keyword key) default]))
+                                   (into {}))
+                              (evaluate config*))
+              input-env (merge default-env env)
+              config (assoc config* :env input-env)
+              resolved-body (evaluate body config)
+              output-env (extract-module-env provides resolved-body input-env)]
+          {:header header :env output-env :body resolved-body})
+        ))))
 
 
 (def config-keyset
@@ -421,3 +461,14 @@
         (log :info (str "Seed: " (.getTime effective)))
         result))))
 
+(defn -main []
+  (flax/evaluate (yaml/parse-string "
+- module:
+  - requires: [foo]
+  - (log: [info, «foo]
+  - (foo: [1, 2, 3]
+  inputs: {foo: lalalalz}
+- this:
+    is: [a, test]
+") {:env (System/getenv)}) 
+  (run-module [{:name "foo" :requires ["bar" "baz"]} "do nothing"] {}))
