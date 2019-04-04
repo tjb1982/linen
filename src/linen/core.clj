@@ -10,7 +10,7 @@
             [stencil.core :refer [render]]
             [flax.core :as flax]
             )
-  (:import linen.data.FileDataConnector
+  (:import linen.connector.file.FileDataConnector
            clojure.lang.MapEntry
            LinenJNI)
   (:gen-class))
